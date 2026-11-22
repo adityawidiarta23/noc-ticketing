@@ -1,0 +1,3260 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sokka Tama Fiber — NOC Ticketing (Backbone &amp; Gamas)</title>
+
+  <!-- Google Fonts: Inter untuk UI & JetBrains Mono untuk data teknis NOC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- SheetJS (XLSX) CDN untuk Export Excel Multi-Sheet (.xlsx) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <style>
+    /* Scrollbar gelap khas NOC Command Center */
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #020617;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Animasi halus untuk modal & notifikasi toast */
+    @keyframes modalPop {
+      from { opacity: 0; transform: scale(0.97) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .animate-modal {
+      animation: modalPop 0.18s ease-out forwards;
+    }
+
+    @keyframes toastSlide {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-toast {
+      animation: toastSlide 0.2s ease-out forwards;
+    }
+
+    /* Glow halus untuk badge Critical */
+    .glow-critical {
+      box-shadow: 0 0 12px rgba(244, 63, 94, 0.3);
+    }
+
+    /* ==================== CSS KHUSUS CETAK / SAVE PDF CIR ==================== */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 12mm;
+      }
+
+      html, body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: auto !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Sembunyikan seluruh elemen dashboard dan modal lain saat print */
+      .no-print,
+      header,
+      main,
+      footer,
+      #formModal,
+      #detailModal,
+      #typeModal,
+      #confirmModal,
+      #toastContainer {
+        display: none !important;
+      }
+
+      /* Tampilkan hanya area dokumen CIR */
+      #cirModal {
+        position: static !important;
+        display: block !important;
+        background: #ffffff !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+
+      #cirModalWrapper,
+      #cirModalDialog {
+        display: block !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: #ffffff !important;
+      }
+
+      #cirPrintArea {
+        display: block !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+
+      #cirPrintArea .cir-card {
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+
+      #cirPrintArea .cir-title,
+      #cirPrintArea .cir-text-primary {
+        color: #0f172a !important;
+      }
+
+      #cirPrintArea .cir-text-muted {
+        color: #475569 !important;
+      }
+
+      #cirPrintArea .cir-chip {
+        background: #f1f5f9 !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+      }
+
+      #cirPrintArea .cir-logo-box {
+        background: #ffffff !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+      }
+
+      #cirPrintArea table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+
+      #cirPrintArea th {
+        background: #e2e8f0 !important;
+        color: #0f172a !important;
+        border: 1px solid #94a3b8 !important;
+      }
+
+      #cirPrintArea td {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+
+      #cirPrintArea tr {
+        page-break-inside: avoid !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+
+  <!-- ==================== HEADER & NAVIGASI NOC ==================== -->
+  <header class="no-print sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
+        <!-- Brand Logo SOKKA TAMA FIBER & Live NOC Clock -->
+        <div class="flex flex-wrap items-center gap-3.5">
+          <!-- Wadah Pill Putih Logo SOKKA TAMA FIBER + Kontrol Upload/Reset saat Hover -->
+          <div class="relative group shrink-0">
+            <div
+              id="headerLogoSlot"
+              class="bg-white rounded-xl px-3.5 py-1.5 shadow-md border border-slate-200/80 flex items-center justify-center min-h-[46px]"
+            >
+              <!-- Diisi otomatis oleh renderBrandLogos() -->
+            </div>
+
+            <!-- Input file tersembunyi untuk upload logo PNG/JPG custom -->
+            <input
+              id="logoFileInput"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              class="hidden"
+            />
+
+            <!-- Tombol kecil opsional (muncul saat hover/focus) untuk unggah & reset logo -->
+            <div class="absolute -bottom-2 -right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+              <button
+                id="btnUploadLogo"
+                type="button"
+                class="p-1.5 rounded-full bg-slate-900 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-slate-700 hover:border-cyan-400 shadow-lg transition-colors cursor-pointer"
+                title="Unggah Logo Custom (PNG/JPG)"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+              <button
+                id="btnResetLogo"
+                type="button"
+                class="hidden p-1.5 rounded-full bg-slate-900 hover:bg-rose-500 text-rose-300 hover:text-white border border-slate-700 hover:border-rose-400 shadow-lg transition-colors cursor-pointer"
+                title="Kembalikan ke Logo SVG Default Sokka Tama Fiber"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="h-9 w-px bg-slate-800 hidden sm:block"></div>
+
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">NOC Ticketing — Backbone &amp; Gamas</h1>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                NOC LIVE
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
+              <span>Network Operations Center</span>
+              <span class="text-slate-600 hidden sm:inline">•</span>
+              <span id="nocClock" class="font-mono text-cyan-400 font-medium">--:--:-- WIB</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Tombol Aksi Header -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            id="btnResetData"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+            title="Kembalikan ke 5 data contoh &amp; tipe default"
+          >
+            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Reset Data</span>
+          </button>
+
+          <button
+            id="btnExportExcel"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-colors cursor-pointer"
+            title="Export 2 Sheet (Data_Tiket &amp; Kronologi_CIR) ke Excel (.xlsx)"
+          >
+            <svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Export Excel (.xlsx)</span>
+          </button>
+
+          <button
+            id="btnOpenCreate"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Buat Tiket Baru</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== KONTEN UTAMA DASHBOARD ==================== -->
+  <main class="no-print flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- 1. KARTU KPI INTERAKTIF (KLIK SEBAGAI FILTER CEPAT) -->
+    <section aria-label="KPI Dashboard NOC" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      <!-- Total Tiket -->
+      <button type="button" onclick="applyQuickFilter('ALL')" class="text-left group bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-600 rounded-xl p-4 transition-all cursor-pointer">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Tiket</span>
+          <span class="p-1.5 rounded-lg bg-slate-800 text-slate-300 group-hover:text-white">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </span>
+        </div>
+        <div id="kpiTotal" class="text-2xl sm:text-3xl font-bold text-white font-mono">0</div>
+        <div class="text-[11px] text-slate-500 mt-1">Semua tiket tercatat</div>
+      </button>
+
+      <!-- Active / Down -->
+      <button type="button" onclick="applyQuickFilter('ACTIVE')" class="text-left group bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-amber-500/40 rounded-xl p-4 transition-all cursor-pointer">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Active / Down</span>
+          <span class="p-1.5 rounded-lg bg-amber-500/10 text-amber-400">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </span>
+        </div>
+        <div id="kpiActive" class="text-2xl sm:text-3xl font-bold text-amber-400 font-mono">0</div>
+        <div class="text-[11px] text-slate-500 mt-1">Open, Progress, Escalated, Pending</div>
+      </button>
+
+      <!-- Critical -->
+      <button type="button" onclick="applyQuickFilter('CRITICAL')" class="text-left group bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-rose-500/50 rounded-xl p-4 transition-all cursor-pointer">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-semibold text-rose-400 uppercase tracking-wider">Critical</span>
+          <span class="p-1.5 rounded-lg bg-rose-500/10 text-rose-400">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </span>
+        </div>
+        <div id="kpiCritical" class="text-2xl sm:text-3xl font-bold text-rose-400 font-mono">0</div>
+        <div class="text-[11px] text-slate-500 mt-1">Prioritas Critical aktif</div>
+      </button>
+
+      <!-- Total Impact Aktif -->
+      <button type="button" onclick="applyQuickFilter('ACTIVE')" class="text-left group bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all cursor-pointer">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">Total Impact Aktif</span>
+          <span class="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </span>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span id="kpiImpactNodes" class="text-2xl sm:text-3xl font-bold text-cyan-400 font-mono">0</span>
+          <span class="text-xs text-slate-400">node/item</span>
+        </div>
+        <div id="kpiImpactSubs" class="text-[11px] text-cyan-300/80 font-mono mt-1">~0 pelanggan/link</div>
+      </button>
+
+      <!-- Resolved / Closed -->
+      <button type="button" onclick="applyQuickFilter('RESOLVED')" class="col-span-2 sm:col-span-1 text-left group bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-emerald-500/40 rounded-xl p-4 transition-all cursor-pointer">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">Resolved / Closed</span>
+          <span class="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </span>
+        </div>
+        <div id="kpiResolved" class="text-2xl sm:text-3xl font-bold text-emerald-400 font-mono">0</div>
+        <div class="text-[11px] text-slate-500 mt-1">Layanan / link pulih</div>
+      </button>
+    </section>
+
+    <!-- 2. FILTER BAR & MANAJEMEN TIPE DINAMIS -->
+    <section aria-label="Filter dan Pencarian" class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+        <!-- Input Pencarian -->
+        <div class="lg:col-span-4 relative">
+          <label for="searchInput" class="sr-only">Cari Tiket</label>
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="Cari No. Tiket, Segmen, Impact, RCA, Progress..."
+            class="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
+          />
+        </div>
+
+        <!-- Dropdown Filter Tipe + Tombol Gear Kelola Tipe -->
+        <div class="lg:col-span-3 flex items-center gap-1.5">
+          <label for="filterType" class="sr-only">Filter Tipe</label>
+          <select
+            id="filterType"
+            class="flex-1 min-w-0 px-3 py-2.5 text-sm bg-slate-950 border border-slate-700/80 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+          ></select>
+          <button
+            id="btnManageTypes"
+            type="button"
+            class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-2.5 rounded-lg bg-slate-950 hover:bg-cyan-500/15 text-cyan-400 hover:text-cyan-300 border border-slate-700/80 hover:border-cyan-500/40 text-xs font-medium transition-colors cursor-pointer"
+            title="Tambah, Edit, atau Hapus Tipe Tiket"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span class="hidden xl:inline">Tipe</span>
+          </button>
+        </div>
+
+        <!-- Filter Status -->
+        <div class="lg:col-span-2">
+          <label for="filterStatus" class="sr-only">Filter Status</label>
+          <select id="filterStatus" class="w-full px-3 py-2.5 text-sm bg-slate-950 border border-slate-700/80 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500">
+            <option value="ALL">Status: Semua</option>
+            <option value="ACTIVE_GROUP">Active / Down (Belum Selesai)</option>
+            <option value="Open">Open</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Escalated">Escalated</option>
+            <option value="Pending">Pending</option>
+            <option value="Resolved">Resolved</option>
+            <option value="Closed">Closed</option>
+            <option value="RESOLVED_GROUP">Selesai (Resolved &amp; Closed)</option>
+          </select>
+        </div>
+
+        <!-- Filter Prioritas -->
+        <div class="lg:col-span-2">
+          <label for="filterPriority" class="sr-only">Filter Prioritas</label>
+          <select id="filterPriority" class="w-full px-3 py-2.5 text-sm bg-slate-950 border border-slate-700/80 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500">
+            <option value="ALL">Prioritas: Semua</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+
+        <!-- Tombol Reset Filter -->
+        <div class="lg:col-span-1">
+          <button
+            id="btnClearFilter"
+            type="button"
+            class="w-full px-3 py-2.5 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-3 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <span id="filterSummary">Menampilkan 0 tiket</span>
+        <span class="text-slate-500">Klik baris untuk kelola <strong class="text-cyan-400">List Progress</strong>, atau klik <strong class="text-amber-300">Lihat CIR</strong> untuk dokumen kronologi siap cetak PDF</span>
+      </div>
+    </section>
+
+    <!-- 3. TABEL TIKET UTAMA DENGAN KOLOM LIST IMPACT + LIST PROGRESS / CIR -->
+    <section aria-label="Tabel Daftar Tiket Backbone dan Gamas" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl shadow-black/30">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-950/90 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <th class="py-3.5 px-4 whitespace-nowrap">No. Tiket &amp; MTTR</th>
+              <th class="py-3.5 px-4 whitespace-nowrap">Tipe &amp; Prioritas</th>
+              <th class="py-3.5 px-4 min-w-[230px]">Segmen / Link / PIC</th>
+              <th class="py-3.5 px-4 min-w-[250px] bg-cyan-950/20 text-cyan-300 border-x border-slate-800">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <span>List Impact</span>
+                </div>
+              </th>
+              <th class="py-3.5 px-4 min-w-[260px] bg-amber-950/15 text-amber-300 border-r border-slate-800">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>List Progress / CIR</span>
+                </div>
+              </th>
+              <th class="py-3.5 px-4 whitespace-nowrap text-right">Status &amp; Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="ticketTableBody" class="divide-y divide-slate-800 text-sm">
+            <!-- Dirender dinamis oleh JavaScript -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden py-14 px-4 text-center">
+        <div class="w-12 h-12 mx-auto rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-500 mb-3">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 class="text-sm font-semibold text-slate-200">Tidak ada tiket yang cocok</h3>
+        <p class="text-xs text-slate-500 mt-1">Ubah kata kunci pencarian, reset filter, atau buat tiket gangguan baru.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="no-print border-t border-slate-900 py-4 text-center text-xs text-slate-500">
+    Backbone &amp; Gamas NOC Ticketing System • List Impact • List Progress &amp; CIR (Chronology of Incident Report) • Export Multi-Sheet Excel (.xlsx)
+  </footer>
+
+  <!-- ==================== MODAL BUAT / EDIT TIKET ==================== -->
+  <div id="formModal" class="no-print hidden fixed inset-0 z-40 overflow-y-auto bg-black/75 backdrop-blur-sm p-3 sm:p-6">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="animate-modal w-full max-w-3xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden">
+        <!-- Header Modal -->
+        <div class="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h2 id="formModalTitle" class="text-base sm:text-lg font-bold text-white">Buat Tiket Insiden Baru</h2>
+            <p id="formModalSub" class="text-xs text-slate-400">No. Tiket terisi otomatis (BBG-YYYYMMDD-XXX) dan bisa diubah manual.</p>
+          </div>
+          <button type="button" onclick="closeFormModal()" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Form Tiket -->
+        <form id="ticketForm" class="p-5 sm:p-6 space-y-4">
+          <input type="hidden" id="editTicketOrigId" value="" />
+
+          <!-- Baris 1: No. Tiket, Tipe, Prioritas, Status -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div>
+              <label for="inTicketNo" class="block text-xs font-medium text-slate-300 mb-1.5">No. Tiket <span class="text-rose-400">*</span></label>
+              <input id="inTicketNo" type="text" required placeholder="BBG-20261122-001" class="w-full px-3 py-2 text-sm font-mono bg-slate-950 border border-slate-700 rounded-lg text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+            </div>
+
+            <div>
+              <label for="inType" class="block text-xs font-medium text-slate-300 mb-1.5">Tipe Tiket <span class="text-rose-400">*</span></label>
+              <select id="inType" required class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500"></select>
+            </div>
+
+            <div>
+              <label for="inPriority" class="block text-xs font-medium text-slate-300 mb-1.5">Prioritas <span class="text-rose-400">*</span></label>
+              <select id="inPriority" required class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500">
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="inStatus" class="block text-xs font-medium text-slate-300 mb-1.5">Status <span class="text-rose-400">*</span></label>
+              <select id="inStatus" required class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500">
+                <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Escalated">Escalated</option>
+                <option value="Pending">Pending</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Baris 2: Segmen/Link/Node & Lokasi -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="inSegment" class="block text-xs font-medium text-slate-300 mb-1.5">Segmen / Link / Node <span class="text-rose-400">*</span></label>
+              <input id="inSegment" type="text" required placeholder="Contoh: Fiber Cut Backbone 100G POP Bekasi ↔ Cikarang" class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+            </div>
+
+            <div>
+              <label for="inLocation" class="block text-xs font-medium text-slate-300 mb-1.5">Lokasi / OTDR / Koordinat <span class="text-rose-400">*</span></label>
+              <input id="inLocation" type="text" required placeholder="Contoh: OTDR 14.2 km dari POP Bekasi (Jl. Kalimalang)" class="w-full px-3 py-2 text-sm font-mono bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+            </div>
+          </div>
+
+          <!-- Input List Impact Interaktif -->
+          <div class="bg-slate-950 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <label for="inImpactItem" class="block text-xs font-semibold text-cyan-400 uppercase tracking-wider">List Impact (POP / OLT / ODC / Corporate Client)</label>
+                <p class="text-[11px] text-slate-400">Ketik node/item lalu tekan <kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-slate-300">Enter</kbd> atau klik <strong>+ Tambah</strong>. Mendukung <em>paste</em> banyak baris sekaligus.</p>
+              </div>
+              <span id="formImpactCount" class="text-xs font-mono px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 self-start sm:self-center">0 item</span>
+            </div>
+
+            <div class="flex gap-2">
+              <textarea
+                id="inImpactItem"
+                rows="1"
+                placeholder="Contoh: POP Cikarang Utara, OLT-CKR-01, PT Kawasan Industri Corp..."
+                class="flex-1 px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
+              ></textarea>
+              <button
+                id="btnAddImpactChip"
+                type="button"
+                class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                + Tambah
+              </button>
+            </div>
+
+            <div id="formImpactChips" class="flex flex-wrap gap-1.5 min-h-[36px] p-2 rounded-lg bg-slate-900/70 border border-slate-800">
+              <span class="text-xs text-slate-500 italic self-center">Belum ada item impact ditambahkan...</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label for="inImpactSubs" class="block text-xs font-medium text-slate-300 mb-1">Estimasi Pelanggan / Link Terdampak</label>
+                <input id="inImpactSubs" type="number" min="0" value="0" placeholder="Contoh: 1250" class="w-full px-3 py-2 text-sm font-mono bg-slate-900 border border-slate-700 rounded-lg text-cyan-300 focus:outline-none focus:border-cyan-500" />
+              </div>
+              <div>
+                <label for="inTechnician" class="block text-xs font-medium text-slate-300 mb-1">Tim / PIC Lapangan <span class="text-rose-400">*</span></label>
+                <input id="inTechnician" list="techList" type="text" required placeholder="Contoh: Tim Jointer Backbone 1 (Raka)" class="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+                <datalist id="techList">
+                  <option value="Tim Jointer Backbone 1 (Raka)"></option>
+                  <option value="NOC Core (Dimas)"></option>
+                  <option value="Vendor FO Mitra Nusantara"></option>
+                  <option value="Tim Power &amp; CME Regional"></option>
+                  <option value="NOC IP Routing L3"></option>
+                  <option value="NOC Shift Lead (Andi)"></option>
+                </datalist>
+              </div>
+            </div>
+          </div>
+
+          <!-- Baris 3: Waktu Mulai & Waktu Resolved -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="inStartTime" class="block text-xs font-medium text-slate-300 mb-1.5">Waktu Mulai Gangguan (WIB) <span class="text-rose-400">*</span></label>
+              <input id="inStartTime" type="datetime-local" required class="w-full px-3 py-2 text-sm font-mono bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500" />
+            </div>
+            <div>
+              <label for="inResolvedTime" class="block text-xs font-medium text-slate-300 mb-1.5">Waktu Resolved / Up (Opsional)</label>
+              <input id="inResolvedTime" type="datetime-local" class="w-full px-3 py-2 text-sm font-mono bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500" />
+            </div>
+          </div>
+
+          <!-- Baris 4: RCA & Action Taken -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="inRca" class="block text-xs font-medium text-slate-300 mb-1.5">Root Cause Analysis (RCA)</label>
+              <textarea id="inRca" rows="2" placeholder="Penyebab utama gangguan (FO cut terkena ekskavator, SFP overheat, PLN padam)..." class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500"></textarea>
+            </div>
+            <div>
+              <label for="inActionTaken" class="block text-xs font-medium text-slate-300 mb-1.5">Action Taken / Penanganan</label>
+              <textarea id="inActionTaken" rows="2" placeholder="Reroute traffic via backup ring, tarik kabel baru 120m &amp; splicing, ganti modul QSFP28..." class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500"></textarea>
+            </div>
+          </div>
+
+          <!-- Baris 5: Progress Awal (Khusus saat Buat Tiket Baru) -->
+          <div id="initialProgressBox" class="bg-slate-950 border border-amber-500/30 rounded-xl p-4 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label for="inInitialProgress" class="text-xs font-semibold text-amber-400 uppercase tracking-wider">Progress Awal untuk CIR (Opsional)</label>
+              <span class="text-[11px] text-slate-500">Otomatis masuk item pertama di List Progress</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <select id="inInitialStage" class="px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-amber-500">
+                <option value="Alarm / Detection">Tahap: Alarm / Detection</option>
+                <option value="Initial Check">Tahap: Initial Check</option>
+                <option value="Dispatch / OTW">Tahap: Dispatch / OTW</option>
+                <option value="On-Site / OTDR">Tahap: On-Site / OTDR</option>
+                <option value="Splicing / Repair">Tahap: Splicing / Repair</option>
+                <option value="RFO / Verification">Tahap: RFO / Verification</option>
+                <option value="Resolved / Up">Tahap: Resolved / Up</option>
+                <option value="Update">Tahap: Update</option>
+              </select>
+              <input id="inInitialProgress" type="text" placeholder="Contoh: Alarm LOS terdeteksi di NMS, NOC melakukan cek interface &amp; koordinasi tim lapangan..." class="sm:col-span-2 px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+            </div>
+          </div>
+
+          <!-- Footer Form -->
+          <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+            <button type="button" onclick="closeFormModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer">
+              Batal
+            </button>
+            <button type="submit" class="px-5 py-2 rounded-lg text-sm font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20 transition-colors cursor-pointer">
+              Simpan Tiket
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DETAIL TIKET + LIST PROGRESS / KRONOLOGI (CIR) ==================== -->
+  <div id="detailModal" class="no-print hidden fixed inset-0 z-40 overflow-y-auto bg-black/75 backdrop-blur-sm p-3 sm:p-6">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="animate-modal w-full max-w-6xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden">
+        <!-- Header Detail -->
+        <div class="px-5 sm:px-6 py-4 bg-slate-950 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="detId" class="font-mono text-base sm:text-lg font-bold text-cyan-400">BBG-00000000-000</span>
+            <span id="detTypeBadge"></span>
+            <span id="detPriorityBadge"></span>
+            <span id="detStatusBadge"></span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              id="btnDetailOpenCir"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 transition-colors cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Lihat CIR</span>
+            </button>
+
+            <button
+              id="btnDetailCopyWa"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 transition-colors cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span>Salin WA</span>
+            </button>
+
+            <button
+              id="btnDetailEdit"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+            >
+              <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>Edit</span>
+            </button>
+
+            <button type="button" onclick="closeDetailModal()" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Konten 2 Kolom Detail -->
+        <div class="p-5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- KOLOM KIRI (5): Ringkasan Insiden, Status Cepat, & List Impact -->
+          <div class="lg:col-span-5 space-y-4">
+            <!-- Info Insiden & MTTR -->
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ringkasan Insiden</h3>
+                <span id="detDuration" class="font-mono text-xs px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700"></span>
+              </div>
+
+              <div class="space-y-2.5 text-xs">
+                <div>
+                  <div class="text-slate-500 mb-0.5">Segmen / Link / Node</div>
+                  <div id="detSegment" class="text-sm font-semibold text-white"></div>
+                </div>
+                <div>
+                  <div class="text-slate-500 mb-0.5">Lokasi / OTDR</div>
+                  <div id="detLocation" class="font-mono text-amber-300"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <div class="text-slate-500 mb-0.5">PIC / Tim</div>
+                    <div id="detTechnician" class="text-slate-200 font-medium"></div>
+                  </div>
+                  <div>
+                    <div class="text-slate-500 mb-0.5">Est. Terdampak</div>
+                    <div id="detImpactSubs" class="font-mono font-semibold text-cyan-400"></div>
+                  </div>
+                  <div>
+                    <div class="text-slate-500 mb-0.5">Waktu Mulai</div>
+                    <div id="detStartTime" class="font-mono text-slate-300"></div>
+                  </div>
+                  <div>
+                    <div class="text-slate-500 mb-0.5">Waktu Resolved</div>
+                    <div id="detResolvedTime" class="font-mono text-emerald-400"></div>
+                  </div>
+                </div>
+
+                <!-- Ubah Status Cepat -->
+                <div class="pt-2.5 border-t border-slate-800 flex items-center gap-2">
+                  <label for="detQuickStatus" class="text-slate-400 shrink-0">Ubah Status:</label>
+                  <select id="detQuickStatus" class="flex-1 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500">
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Escalated">Escalated</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                  <button id="btnApplyQuickStatus" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 cursor-pointer transition-colors">
+                    Terapkan
+                  </button>
+                </div>
+              </div>
+
+              <!-- RCA & Action Taken -->
+              <div class="pt-2.5 border-t border-slate-800 space-y-2 text-xs">
+                <div>
+                  <div class="text-slate-500 mb-1">Root Cause Analysis (RCA)</div>
+                  <div id="detRca" class="text-slate-200 bg-slate-900 p-2.5 rounded-lg border border-slate-800 leading-relaxed whitespace-pre-line"></div>
+                </div>
+                <div>
+                  <div class="text-slate-500 mb-1">Action Taken</div>
+                  <div id="detActionTaken" class="text-slate-200 bg-slate-900 p-2.5 rounded-lg border border-slate-800 leading-relaxed whitespace-pre-line"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- List Impact Interaktif di Modal Detail -->
+            <div class="bg-slate-950 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-semibold text-cyan-400 uppercase tracking-wider">List Impact</h3>
+                <span id="detImpactBadgeCount" class="font-mono text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">0 item</span>
+              </div>
+
+              <div id="detImpactList" class="flex flex-wrap gap-1.5"></div>
+
+              <div class="flex gap-2 pt-2 border-t border-slate-800">
+                <input
+                  id="detQuickImpactInput"
+                  type="text"
+                  placeholder="Tambah POP / OLT / client terdampak..."
+                  class="flex-1 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+                <button
+                  id="btnDetQuickAddImpact"
+                  type="button"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer"
+                >
+                  + Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- KOLOM KANAN (7): LIST PROGRESS / KRONOLOGI (CIR) -->
+          <div class="lg:col-span-7 flex flex-col bg-slate-950 border border-amber-500/30 rounded-xl overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900/70">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wider">List Progress / Kronologi (CIR)</h3>
+              </div>
+              <span id="detProgressCount" class="font-mono text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">0 progress</span>
+            </div>
+
+            <!-- Form Tambah / Edit Progress -->
+            <form id="progressForm" class="p-4 border-b border-slate-800 bg-slate-900/40 space-y-3">
+              <input type="hidden" id="progEditId" value="" />
+              <div class="flex items-center justify-between">
+                <span id="progFormTitle" class="text-xs font-semibold text-cyan-400">Tambah Progress Kronologi Baru</span>
+                <button id="btnCancelProgEdit" type="button" onclick="resetProgressForm()" class="hidden text-xs text-slate-400 hover:text-white underline cursor-pointer">
+                  Batal Edit
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label for="progTimestamp" class="block text-[11px] text-slate-400 mb-1">Waktu (WIB / Backdate)</label>
+                  <input id="progTimestamp" type="datetime-local" required class="w-full px-2.5 py-1.5 text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500" />
+                </div>
+                <div>
+                  <label for="progStage" class="block text-[11px] text-slate-400 mb-1">Tahap (Stage)</label>
+                  <select id="progStage" required class="w-full px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500">
+                    <option value="Alarm / Detection">Alarm / Detection</option>
+                    <option value="Initial Check">Initial Check</option>
+                    <option value="Dispatch / OTW">Dispatch / OTW</option>
+                    <option value="On-Site / OTDR">On-Site / OTDR</option>
+                    <option value="Splicing / Repair">Splicing / Repair</option>
+                    <option value="RFO / Verification">RFO / Verification</option>
+                    <option value="Resolved / Up">Resolved / Up</option>
+                    <option value="Update">Update</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="progPic" class="block text-[11px] text-slate-400 mb-1">PIC / Operator</label>
+                  <input id="progPic" list="techList" type="text" required placeholder="Nama NOC / Teknisi" class="w-full px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500" />
+                </div>
+              </div>
+
+              <div class="flex flex-col sm:flex-row gap-2">
+                <textarea
+                  id="progNote"
+                  rows="2"
+                  required
+                  placeholder="Tulis deskripsi progress kronologis (mis. Hasil ukur OTDR putus di KM 14.2, tim mulai splicing core 1-12)..."
+                  class="flex-1 px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                ></textarea>
+                <button
+                  id="btnSubmitProg"
+                  type="submit"
+                  class="sm:self-end px-4 py-2 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  + Tambah Progress
+                </button>
+              </div>
+            </form>
+
+            <!-- Timeline Vertikal Kronologis -->
+            <div id="detProgressTimeline" class="p-4 overflow-y-auto flex-1 max-h-[430px] space-y-3.5">
+              <!-- Dirender dinamis oleh JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL KHUSUS "LIHAT CIR" (CHRONOLOGY OF INCIDENT REPORT) ==================== -->
+  <div id="cirModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-sm p-3 sm:p-6">
+    <div id="cirModalWrapper" class="min-h-full flex items-center justify-center">
+      <div id="cirModalDialog" class="animate-modal w-full max-w-4xl bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden">
+        <!-- Toolbar Aksi CIR (Disembunyikan saat Print PDF) -->
+        <div class="no-print px-5 sm:px-6 py-3.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35 font-mono">CIR</span>
+            <h2 class="text-sm sm:text-base font-bold text-white">Chronology of Incident Report</h2>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              id="btnCopyCirText"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/35 transition-colors cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span>Salin Teks CIR (WA / Email)</span>
+            </button>
+
+            <button
+              id="btnPrintCirPdf"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20 transition-colors cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>Cetak / Simpan PDF CIR</span>
+            </button>
+
+            <button type="button" onclick="closeCirModal()" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- AREA DOKUMEN CIR FORMAL (YANG AKAN DICETAK SAAT PRINT) -->
+        <div id="cirPrintArea" class="p-6 sm:p-8 bg-slate-950 text-slate-100 space-y-6">
+          <!-- Header / Kop Dokumen CIR Resmi SOKKA TAMA FIBER -->
+          <div class="border-b-2 border-slate-700 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div class="space-y-2.5">
+              <div
+                id="cirLogoSlot"
+                class="cir-logo-box inline-flex items-center bg-white rounded-xl px-3.5 py-1.5 shadow-sm border border-slate-200/80"
+              >
+                <!-- Diisi otomatis oleh renderBrandLogos() -->
+              </div>
+              <div>
+                <div class="text-[11px] font-bold tracking-widest uppercase text-cyan-400 cir-text-muted">Network Operations Center — Sokka Tama Fiber</div>
+                <h1 class="text-xl sm:text-2xl font-bold text-white cir-title mt-0.5">CHRONOLOGY OF INCIDENT REPORT (CIR)</h1>
+                <p class="text-xs text-slate-400 cir-text-muted mt-1">Laporan Resmi Kronologi Penanganan Gangguan Backbone &amp; Massal</p>
+              </div>
+            </div>
+            <div class="sm:text-right space-y-1.5">
+              <div id="cirDocId" class="font-mono text-base font-bold text-cyan-400 cir-title">BBG-00000000-000</div>
+              <div id="cirDocBadges" class="flex flex-wrap sm:justify-end gap-1.5"></div>
+              <div id="cirGeneratedAt" class="text-[11px] font-mono text-slate-500 cir-text-muted"></div>
+            </div>
+          </div>
+
+          <!-- Ringkasan Insiden -->
+          <div class="cir-card bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 cir-title border-b border-slate-800 pb-2">1. Ringkasan Insiden (Incident Summary)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="sm:col-span-2">
+                <span class="text-slate-400 cir-text-muted block mb-0.5">Segmen / Link / Node Terdampak</span>
+                <span id="cirSegment" class="text-sm font-semibold text-white cir-text-primary"></span>
+              </div>
+              <div class="sm:col-span-2">
+                <span class="text-slate-400 cir-text-muted block mb-0.5">Lokasi / Titik Gangguan</span>
+                <span id="cirLocation" class="font-mono text-amber-300 cir-text-primary"></span>
+              </div>
+              <div>
+                <span class="text-slate-400 cir-text-muted block mb-0.5">Waktu Mulai Gangguan (WIB)</span>
+                <span id="cirStartTime" class="font-mono font-semibold text-slate-100 cir-text-primary"></span>
+              </div>
+              <div>
+                <span class="text-slate-400 cir-text-muted block mb-0.5">Waktu Selesai / Resolved (WIB)</span>
+                <span id="cirResolvedTime" class="font-mono font-semibold text-emerald-400 cir-text-primary"></span>
+              </div>
+              <div>
+                <span class="text-slate-400 cir-text-muted block mb-0.5">Total Downtime / MTTR</span>
+                <span id="cirMttr" class="font-mono font-bold text-cyan-300 cir-text-primary"></span>
+              </div>
+              <div>
+                <span class="text-slate-400 cir-text-muted block mb-0.5">PIC / Tim Penanganan</span>
+                <span id="cirTechnician" class="font-medium text-slate-100 cir-text-primary"></span>
+              </div>
+              <div class="sm:col-span-2">
+                <span class="text-slate-400 cir-text-muted block mb-0.5">Estimasi Pelanggan / Link Terdampak</span>
+                <span id="cirImpactSubs" class="font-mono font-semibold text-amber-300 cir-text-primary"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Daftar Impact (List Impact) -->
+          <div class="cir-card bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2.5">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 cir-title">2. Daftar Impact (List Impact)</h3>
+              <span id="cirImpactCount" class="font-mono text-[11px] text-slate-400 cir-text-muted">0 node</span>
+            </div>
+            <div id="cirImpactList" class="flex flex-wrap gap-1.5 text-xs"></div>
+          </div>
+
+          <!-- RCA & Action Taken -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="cir-card bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1.5">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-rose-400 cir-title">3. Root Cause Analysis (RCA)</h3>
+              <p id="cirRca" class="text-xs text-slate-200 cir-text-primary leading-relaxed whitespace-pre-line"></p>
+            </div>
+            <div class="cir-card bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1.5">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 cir-title">4. Action Taken</h3>
+              <p id="cirActionTaken" class="text-xs text-slate-200 cir-text-primary leading-relaxed whitespace-pre-line"></p>
+            </div>
+          </div>
+
+          <!-- Tabel Kronologi Progress (CIR) -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 cir-title">5. Tabel Kronologi Progress (Chronology of Incident)</h3>
+              <span id="cirTableCount" class="font-mono text-[11px] text-slate-400 cir-text-muted">0 langkah</span>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-800">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-slate-900 text-slate-300 border-b border-slate-800">
+                    <th class="py-2.5 px-3 w-10 text-center">No</th>
+                    <th class="py-2.5 px-3 whitespace-nowrap">Waktu (WIB)</th>
+                    <th class="py-2.5 px-3 whitespace-nowrap">Tahap</th>
+                    <th class="py-2.5 px-3 whitespace-nowrap">PIC</th>
+                    <th class="py-2.5 px-3">Keterangan Progress</th>
+                  </tr>
+                </thead>
+                <tbody id="cirChronologyBody" class="divide-y divide-slate-800 bg-slate-950"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Footer Tanda Tangan Dokumen CIR -->
+          <div class="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 cir-text-muted">
+            <span>Dokumen CIR Resmi — Sokka Tama Fiber (NOC Backbone &amp; Gamas Ticketing)</span>
+            <span class="font-mono">Verified by NOC Operations</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL KELOLA TIPE TIKET (TAMBAH, EDIT, HAPUS) ==================== -->
+  <div id="typeModal" class="no-print hidden fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm p-4">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="animate-modal w-full max-w-xl bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl overflow-hidden">
+        <!-- Header Modal Tipe -->
+        <div class="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span>Kelola Tipe Tiket</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Tambah, edit nama/warna (termasuk default), atau hapus tipe kustom.</p>
+          </div>
+          <button type="button" onclick="closeTypeModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-5">
+          <!-- Form Tambah / Mode Edit Tipe -->
+          <form id="typeForm" class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4 transition-colors">
+            <div class="flex items-center justify-between">
+              <h3 id="typeFormTitle" class="text-xs font-bold uppercase tracking-wider text-cyan-400">Tambah Tipe Baru</h3>
+              <span id="typeEditBadge" class="hidden text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium">Mode Edit</span>
+            </div>
+
+            <div>
+              <label for="typeNameInput" class="block text-xs font-medium text-slate-300 mb-1.5">Nama Tipe <span class="text-rose-400">*</span></label>
+              <input
+                id="typeNameInput"
+                type="text"
+                required
+                maxlength="40"
+                placeholder="Contoh: Metro-E, Corporate / B2B, Power / PLN, Planned Maintenance..."
+                class="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            <div>
+              <span class="block text-xs font-medium text-slate-300 mb-2">Pilih Warna Badge</span>
+              <div id="colorPickerGrid" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800">
+              <div class="flex items-center gap-2 text-xs text-slate-400">
+                <span>Preview:</span>
+                <span id="typeLivePreview"></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  id="btnCancelTypeEdit"
+                  type="button"
+                  onclick="cancelTypeEditMode()"
+                  class="hidden px-3 py-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
+                >
+                  Batal Edit
+                </button>
+                <button
+                  id="btnSubmitType"
+                  type="submit"
+                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20 transition-colors cursor-pointer"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span id="btnSubmitTypeLabel">Tambah Tipe</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Daftar Seluruh Tipe Tersedia -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tipe Tersedia</h3>
+              <span id="totalTypesCount" class="font-mono text-[11px] text-slate-500">0 tipe</span>
+            </div>
+            <div id="typeListContainer" class="max-h-60 overflow-y-auto divide-y divide-slate-800 bg-slate-950 border border-slate-800 rounded-xl"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL KONFIRMASI KUSTOM (PENGGANTI confirm()) ==================== -->
+  <div id="confirmModal" class="no-print hidden fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="animate-modal w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6">
+      <div class="flex items-start gap-3.5">
+        <div class="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div>
+          <h3 id="confirmTitle" class="text-base font-bold text-white">Konfirmasi</h3>
+          <p id="confirmMessage" class="text-sm text-slate-400 mt-1 leading-relaxed"></p>
+        </div>
+      </div>
+      <div class="mt-6 flex items-center justify-end gap-2.5">
+        <button id="btnConfirmCancel" type="button" class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer">
+          Batal
+        </button>
+        <button id="btnConfirmOk" type="button" class="px-4 py-2 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-400 text-white transition-colors cursor-pointer">
+          Ya, Lanjutkan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOAST NOTIFICATION CONTAINER ==================== -->
+  <div id="toastContainer" class="no-print fixed bottom-4 right-4 z-[70] flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- ==================== LOGIKA JAVASCRIPT APLIKASI ==================== -->
+  <script>
+    /**
+     * Backbone & Gamas NOC Ticketing System v4
+     * Fitur lengkap: Manajemen Tipe Dinamis (Tambah/Edit/Hapus + Auto-Sync),
+     * Kolom List Impact, List Progress terstruktur, Modal CIR siap Print/PDF,
+     * Salin Laporan WA/CIR, dan Export Excel Multi-Sheet (Data_Tiket & Kronologi_CIR).
+     */
+    const TICKETS_STORAGE_KEY = 'noc_bbg_cir_tickets_v4';
+    const TYPES_STORAGE_KEY = 'noc_bbg_cir_types_v4';
+    const LOGO_STORAGE_KEY = 'sokka_tama_custom_logo_v1';
+    const MANAGE_TYPE_OPTION_VALUE = '__MANAGE_TYPES__';
+
+    const ACTIVE_STATUSES = ['Open', 'In Progress', 'Escalated', 'Pending'];
+    const DONE_STATUSES = ['Resolved', 'Closed'];
+
+    // 7 Palet warna neon untuk badge tipe tiket
+    const TYPE_COLOR_PALETTE = {
+      cyan:    { label: 'Cyan',    badge: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',       dot: 'bg-cyan-400' },
+      purple:  { label: 'Purple',  badge: 'bg-purple-500/15 text-purple-300 border-purple-500/35', dot: 'bg-purple-400' },
+      amber:   { label: 'Amber',   badge: 'bg-amber-500/15 text-amber-300 border-amber-500/35',    dot: 'bg-amber-400' },
+      rose:    { label: 'Rose',    badge: 'bg-rose-500/15 text-rose-300 border-rose-500/35',       dot: 'bg-rose-400' },
+      emerald: { label: 'Emerald', badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35', dot: 'bg-emerald-400' },
+      blue:    { label: 'Blue',    badge: 'bg-blue-500/15 text-blue-300 border-blue-500/35',       dot: 'bg-blue-400' },
+      orange:  { label: 'Orange',  badge: 'bg-orange-500/15 text-orange-300 border-orange-500/35', dot: 'bg-orange-400' }
+    };
+
+    // Warna badge untuk setiap tahap (Stage) progress CIR
+    const STAGE_BADGE_MAP = {
+      'Alarm / Detection':  'bg-rose-500/15 text-rose-300 border-rose-500/35',
+      'Initial Check':      'bg-blue-500/15 text-blue-300 border-blue-500/35',
+      'Dispatch / OTW':     'bg-amber-500/15 text-amber-300 border-amber-500/35',
+      'On-Site / OTDR':     'bg-orange-500/15 text-orange-300 border-orange-500/35',
+      'Splicing / Repair':  'bg-purple-500/15 text-purple-300 border-purple-500/35',
+      'RFO / Verification': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
+      'Resolved / Up':      'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
+      'Update':             'bg-slate-700/70 text-slate-300 border-slate-600'
+    };
+
+    // State global aplikasi
+    let ticketTypes = [];
+    let tickets = [];
+    let formImpacts = [];
+    let activeDetailId = null;
+    let activeCirId = null;
+    let confirmCallback = null;
+
+    // State Manajemen Tipe
+    let lastFilterTypeVal = 'ALL';
+    let lastFormTypeVal = 'Backbone';
+    let typeModalSource = 'button';
+    let editingTypeIndex = null;
+    let selectedTypeColor = 'cyan';
+
+    /**
+     * ==================== LOGO SOKKA TAMA FIBER (INLINE SVG & CUSTOM UPLOAD) ====================
+     * Membuat inline SVG presisi sesuai identitas visual SOKKA TAMA FIBER:
+     * 1 lingkaran biru tua (#23336D) di kiri bawah + 4 segitiga tumpul tanpa fill yang
+     * membesar ke kanan atas dengan gradasi biru tua ke cyan (#1B4985 -> #189AD3) + teks 2 baris (#1F2E5C).
+     */
+    function getDefaultSokkaLogoSvg(heightClass = 'h-8 sm:h-9') {
+      return `
+        <svg class="${heightClass} w-auto block select-none" viewBox="0 0 365 98" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sokka Tama Fiber">
+          <defs>
+            <linearGradient id="stfGrad1" x1="18" y1="90" x2="50" y2="58" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#1E3A8A"/>
+              <stop offset="100%" stop-color="#1A5699"/>
+            </linearGradient>
+            <linearGradient id="stfGrad2" x1="28" y1="90" x2="76" y2="42" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#1A5294"/>
+              <stop offset="100%" stop-color="#1272B8"/>
+            </linearGradient>
+            <linearGradient id="stfGrad3" x1="38" y1="90" x2="104" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#126FB3"/>
+              <stop offset="100%" stop-color="#0E86D4"/>
+            </linearGradient>
+            <linearGradient id="stfGrad4" x1="48" y1="90" x2="132" y2="6" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#0E82CD"/>
+              <stop offset="100%" stop-color="#189AD3"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Ikon Geometris Kiri -->
+          <g stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <!-- 1. Lingkaran kecil biru tua di pojok kiri bawah -->
+            <circle cx="16.5" cy="80.5" r="9.5" stroke="#23336D"/>
+
+            <!-- 2. Segitiga tumpul ke-1 (terkecil) -->
+            <path d="M 27 59 H 43 Q 51 59 47.4 66.2 L 38.6 83.8 Q 35 91 31.4 83.8 L 22.6 66.2 Q 19 59 27 59 Z" stroke="url(#stfGrad1)"/>
+
+            <!-- 3. Segitiga tumpul ke-2 -->
+            <path d="M 38 42 H 68 Q 77 42 73 50 L 57 82 Q 53 90 49 82 L 33 50 Q 29 42 38 42 Z" stroke="url(#stfGrad2)"/>
+
+            <!-- 4. Segitiga tumpul ke-3 -->
+            <path d="M 48 25 H 94 Q 104 25 99.5 33.9 L 75.5 81.9 Q 71 91 66.5 81.9 L 42.5 33.9 Q 38 25 48 25 Z" stroke="url(#stfGrad3)"/>
+
+            <!-- 5. Segitiga tumpul ke-4 (terbesar) -->
+            <path d="M 59 8 H 121 Q 132 8 127.1 17.8 L 94.9 82.2 Q 90 92 85.1 82.2 L 52.9 17.8 Q 48 8 59 8 Z" stroke="url(#stfGrad4)"/>
+          </g>
+
+          <!-- Teks 2 Baris SOKKA TAMA FIBER -->
+          <g fill="#1F2E5C" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-weight="800">
+            <text x="148" y="45" font-size="31" letter-spacing="0.4">SOKKA TAMA</text>
+            <text x="148" y="81" font-size="31" letter-spacing="0.4">FIBER</text>
+          </g>
+        </svg>
+      `;
+    }
+
+    /**
+     * Merender logo SOKKA TAMA FIBER (custom dari localStorage jika ada, atau SVG default)
+     * secara sinkron pada Header Navbar dan Kop Dokumen CIR.
+     */
+    function renderBrandLogos() {
+      let customLogo = null;
+      try {
+        customLogo = localStorage.getItem(LOGO_STORAGE_KEY);
+      } catch (e) {
+        console.error('Gagal membaca custom logo:', e);
+      }
+
+      const headerSlot = document.getElementById('headerLogoSlot');
+      const cirSlot = document.getElementById('cirLogoSlot');
+      const resetBtn = document.getElementById('btnResetLogo');
+
+      if (customLogo) {
+        if (headerSlot) {
+          headerSlot.innerHTML = `<img src="${customLogo}" alt="Sokka Tama Fiber Logo" class="h-8 sm:h-9 w-auto max-w-[190px] object-contain block" />`;
+        }
+        if (cirSlot) {
+          cirSlot.innerHTML = `<img src="${customLogo}" alt="Sokka Tama Fiber Logo" class="h-9 sm:h-10 w-auto max-w-[210px] object-contain block" />`;
+        }
+        if (resetBtn) resetBtn.classList.remove('hidden');
+      } else {
+        if (headerSlot) headerSlot.innerHTML = getDefaultSokkaLogoSvg('h-8 sm:h-9');
+        if (cirSlot) cirSlot.innerHTML = getDefaultSokkaLogoSvg('h-9 sm:h-10');
+        if (resetBtn) resetBtn.classList.add('hidden');
+      }
+    }
+
+    /**
+     * Handler unggah logo custom (PNG/JPG/WebP/SVG) lalu simpan sebagai DataURL ke localStorage
+     */
+    function handleLogoUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showToast('Format file harus berupa gambar (PNG/JPG/SVG).', 'error');
+        event.target.value = '';
+        return;
+      }
+
+      if (file.size > 1.5 * 1024 * 1024) {
+        showToast('Ukuran gambar maksimal 1,5 MB agar tersimpan di browser.', 'error');
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        try {
+          localStorage.setItem(LOGO_STORAGE_KEY, ev.target.result);
+          renderBrandLogos();
+          showToast('Logo custom berhasil diunggah & diterapkan ke Header dan CIR!', 'success');
+        } catch (err) {
+          console.error('Gagal menyimpan logo:', err);
+          showToast('Gagal menyimpan logo ke localStorage (kapasitas penuh).', 'error');
+        }
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    }
+
+    /**
+     * Kembalikan logo ke inline SVG default SOKKA TAMA FIBER
+     */
+    function resetBrandLogo() {
+      try {
+        localStorage.removeItem(LOGO_STORAGE_KEY);
+      } catch (e) {
+        console.error('Gagal hapus custom logo:', e);
+      }
+      renderBrandLogos();
+      showToast('Logo dikembalikan ke SVG default SOKKA TAMA FIBER.', 'info');
+    }
+
+    /**
+     * Daftar Tipe Default Awal (Backbone: cyan, Gamas (Massal): rose)
+     */
+    function getDefaultTypes() {
+      return [
+        { name: 'Backbone', color: 'cyan', isDefault: true },
+        { name: 'Gamas (Massal)', color: 'rose', isDefault: true },
+        { name: 'Metro-E', color: 'purple', isDefault: false },
+        { name: 'Power / PLN', color: 'amber', isDefault: false }
+      ];
+    }
+
+    /**
+     * Generator ID unik untuk setiap item progress
+     */
+    function generateProgressId() {
+      return 'PRG-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    }
+
+    /**
+     * 5 Data Contoh Tiket Realistis (masing-masing memiliki 3–5 item progressList kronologis)
+     */
+    function getSampleTickets() {
+      const now = Date.now();
+      const minsAgo = (m) => new Date(now - m * 60 * 1000).toISOString();
+      const hrsAgo = (h) => new Date(now - h * 60 * 60 * 1000).toISOString();
+
+      return [
+        {
+          id: 'BBG-20261122-001',
+          type: 'Backbone',
+          priority: 'Critical',
+          status: 'In Progress',
+          segment: 'FO Cut Backbone 100G POP Bekasi Timur ↔ POP Cikarang',
+          location: 'OTDR 14.2 km dari POP Bekasi Timur (Jl. Inspeksi Kalimalang, Tambun)',
+          impacts: [
+            'POP Cikarang Utara',
+            'POP Jababeka',
+            'OLT-CKR-01',
+            'OLT-CKR-02',
+            'PT Kawasan Industri Corp (10G)',
+            'RS Harapan Cikarang (1G)'
+          ],
+          impactSubs: 2450,
+          startTime: hrsAgo(3.2),
+          resolvedTime: '',
+          technician: 'Tim Jointer Backbone 1 (Raka)',
+          rca: 'Kabel backbone 48 core putus total terkena alat berat proyek pelebaran jalan Kalimalang.',
+          actionTaken: 'Reroute sebagian traffic via ring Karawang, penarikan kabel baru 120 meter, dan penyambungan core prioritas 1–24.',
+          progressList: [
+            {
+              id: 'p101',
+              timestamp: hrsAgo(3.2),
+              stage: 'Alarm / Detection',
+              pic: 'Auto-NMS Alert',
+              note: 'Link 100G POP Bekasi Timur ↔ POP Cikarang terdeteksi DOWN (LOS). 6 node utama & ~2.450 pelanggan terdampak.'
+            },
+            {
+              id: 'p102',
+              timestamp: hrsAgo(3.0),
+              stage: 'Initial Check',
+              pic: 'NOC Shift Lead (Andi)',
+              note: 'Verifikasi optik port Et1/1/1 Rx Power -40 dBm (LOS). Traffic dialihkan sementara via backup ring Karawang (utilisasi 88%).'
+            },
+            {
+              id: 'p103',
+              timestamp: hrsAgo(2.7),
+              stage: 'Dispatch / OTW',
+              pic: 'NOC Dispatcher',
+              note: 'Dispatch Tim Jointer Backbone 1 (Raka) beserta mobil splicing & gulungan kabel 48 core menuju segmen Kalimalang.'
+            },
+            {
+              id: 'p104',
+              timestamp: hrsAgo(1.9),
+              stage: 'On-Site / OTDR',
+              pic: 'Tim Jointer Backbone 1 (Raka)',
+              note: 'Hasil pengukuran OTDR dari POP Bekasi putus di KM 14.2. Titik putus ditemukan di lokasi galian ekskavator proyek saluran air.'
+            },
+            {
+              id: 'p105',
+              timestamp: minsAgo(35),
+              stage: 'Splicing / Repair',
+              pic: 'Tim Jointer Backbone 1 (Raka)',
+              note: 'Penarikan kabel baru 120m selesai. Sedang proses splicing core 1–12 pada joint closure sisi barat.'
+            }
+          ]
+        },
+        {
+          id: 'BBG-20261122-002',
+          type: 'Gamas (Massal)',
+          priority: 'High',
+          status: 'Open',
+          segment: 'Gamas Feeder 24 Core OLT-BKS-UT02 PON 0/3/0 - 0/3/3 (ODC-FA)',
+          location: 'Jl. Perjuangan Bekasi Utara, Tiang T-114 (OTDR 2.1 km)',
+          impacts: [
+            'ODC-BKS-FA',
+            'ODP-FA01 s/d ODP-FA12',
+            'Cluster Harapan Indah Blok B',
+            'Ruko Sentra Niaga Utara'
+          ],
+          impactSubs: 186,
+          startTime: hrsAgo(1.3),
+          resolvedTime: '',
+          technician: 'Vendor FO Mitra Nusantara',
+          rca: 'Kabel udara feeder 24 core tersangkut truk kontainer melintas di persimpangan Jl. Perjuangan.',
+          actionTaken: 'Koordinasi dispatch vendor FO membawa closure 24 core & persiapan penarikan span ulang antar tiang T-113 ke T-115.',
+          progressList: [
+            {
+              id: 'p201',
+              timestamp: hrsAgo(1.3),
+              stage: 'Alarm / Detection',
+              pic: 'NOC Access',
+              note: 'Terdeteksi 186 ONT offline serentak pada 4 port PON OLT-BKS-UT02 (ODC-BKS-FA).'
+            },
+            {
+              id: 'p202',
+              timestamp: hrsAgo(1.1),
+              stage: 'Initial Check',
+              pic: 'NOC Access',
+              note: 'Konfirmasi bukan gangguan power OLT; seluruh port PON lain normal. Indikasi kuat putus kabel feeder.'
+            },
+            {
+              id: 'p203',
+              timestamp: minsAgo(40),
+              stage: 'Dispatch / OTW',
+              pic: 'Vendor FO Mitra Nusantara',
+              note: 'Tim lapangan vendor FO telah menerima SPK dan sedang OTW membawa OTDR, tangga, serta closure 24 core.'
+            }
+          ]
+        },
+        {
+          id: 'BBG-20261122-003',
+          type: 'Metro-E',
+          priority: 'High',
+          status: 'Escalated',
+          segment: 'Flapping Ring Metro-E 100G POP Cyber Jakarta ↔ POP Bekasi Barat',
+          location: 'Router Core-BKS-01 Port Et1/1/2 (Rx -21.8 dBm, Temp 76°C)',
+          impacts: [
+            'POP Bekasi Barat',
+            'POP Galaxy',
+            'OLT-BKS-BR01',
+            'PT Logistik Express (Metro-E 2G)'
+          ],
+          impactSubs: 980,
+          startTime: hrsAgo(2.0),
+          resolvedTime: '',
+          technician: 'NOC Core (Dimas)',
+          rca: 'Modul transceiver QSFP28-100G-LR4 mengalami overheat (76°C) sehingga memicu CRC error dan flapping interface.',
+          actionTaken: 'Eskalasi ke tim Core & Warehouse untuk penggantian modul QSFP28 spare dan pembersihan patchcord LC-UPC.',
+          progressList: [
+            {
+              id: 'p301',
+              timestamp: hrsAgo(2.0),
+              stage: 'Alarm / Detection',
+              pic: 'Auto-NMS Alert',
+              note: 'Interface Et1/1/2 Core-BKS-01 mengalami flapping 5 kali dalam 10 menit, packet loss mencapai 4.5%.'
+            },
+            {
+              id: 'p302',
+              timestamp: hrsAgo(1.7),
+              stage: 'Initial Check',
+              pic: 'NOC Core (Dimas)',
+              note: 'Pengecekan DDM menunjukkan suhu SFP 76°C (melewati threshold 70°C) dan Rx Power melemah ke -21.8 dBm.'
+            },
+            {
+              id: 'p303',
+              timestamp: hrsAgo(1.0),
+              stage: 'Dispatch / OTW',
+              pic: 'NOC Core (Dimas)',
+              note: 'Tiket dieskalasi ke tim Core Lapangan. Teknisi mengambil modul QSFP28-100G-LR4 spare di Warehouse dan OTW ke POP Bekasi Barat.'
+            }
+          ]
+        },
+        {
+          id: 'BBG-20261122-004',
+          type: 'Power / PLN',
+          priority: 'Critical',
+          status: 'Pending',
+          segment: 'Gangguan Power PLN & ATS Genset POP Karawang Barat',
+          location: 'Shelter POP Karawang Barat (-6.3054, 107.2912)',
+          impacts: [
+            'POP Karawang Barat',
+            'OLT-KRW-01',
+            'OLT-KRW-02',
+            'Switch Metro KRW-SW1',
+            'PT Manufaktur Jaya (500M)'
+          ],
+          impactSubs: 1620,
+          startTime: hrsAgo(4.2),
+          resolvedTime: '',
+          technician: 'Tim Power & CME Regional',
+          rca: 'Pemadaman listrik PLN area Karawang Barat disertai kegagalan auto-start ATS genset karena tegangan aki starter drop.',
+          actionTaken: 'Genset dinyalakan secara manual (DC rectifier kembali stabil 53.6V), monitoring BBM, menunggu pemulihan suplai PLN.',
+          progressList: [
+            {
+              id: 'p401',
+              timestamp: hrsAgo(4.2),
+              stage: 'Alarm / Detection',
+              pic: 'Auto-NMS Alert',
+              note: 'Alarm AC Fail & Battery Low (<47.2V) terdeteksi di Shelter POP Karawang Barat.'
+            },
+            {
+              id: 'p402',
+              timestamp: hrsAgo(3.9),
+              stage: 'Dispatch / OTW',
+              pic: 'Tim Power & CME Regional',
+              note: 'Tim CME segera meluncur ke POP Karawang Barat membawa jumper aki dan cadangan solar 40 liter.'
+            },
+            {
+              id: 'p403',
+              timestamp: hrsAgo(3.1),
+              stage: 'On-Site / OTDR',
+              pic: 'Tim Power & CME Regional',
+              note: 'Tiba di lokasi, genset gagal auto-start akibat aki starter drop 10.4V. Dilakukan starter manual dengan jumper.'
+            },
+            {
+              id: 'p404',
+              timestamp: hrsAgo(2.6),
+              stage: 'Update',
+              pic: 'Tim Power & CME Regional',
+              note: 'Genset beroperasi normal, tegangan DC rectifier stabil 53.6V. Status Pending menunggu suplai PLN normal kembali.'
+            }
+          ]
+        },
+        {
+          id: 'BBG-20261122-005',
+          type: 'Backbone',
+          priority: 'Medium',
+          status: 'Resolved',
+          segment: 'Flapping BGP Peering Upstream Tier-1 (IX Singapore - SG1)',
+          location: 'Border Router BR-JKT-01 (Upstream SG1)',
+          impacts: [
+            'Traffic International (SG/US)',
+            'Corporate Dedicated Internet JKT',
+            'Game Routing Latency'
+          ],
+          impactSubs: 320,
+          startTime: hrsAgo(7.0),
+          resolvedTime: hrsAgo(5.4),
+          technician: 'NOC IP Routing L3',
+          rca: 'Maintenance tidak terjadwal pada router border upstream di Equinix SG1 yang menyebabkan BGP session flap.',
+          actionTaken: 'Shift traffic internasional ke upstream backup SG2 selama mitigasi, lalu normalisasi routing setelah sesi BGP SG1 stabil.',
+          progressList: [
+            {
+              id: 'p501',
+              timestamp: hrsAgo(7.0),
+              stage: 'Alarm / Detection',
+              pic: 'Auto-NMS Alert',
+              note: 'BGP session ke Upstream Tier-1 SG1 mengalami flapping 4 kali; latency ke Singapore melonjak >140ms.'
+            },
+            {
+              id: 'p502',
+              timestamp: hrsAgo(6.8),
+              stage: 'Initial Check',
+              pic: 'NOC IP Routing L3',
+              note: 'Traffic internasional di-reroute via Upstream Backup SG2 menggunakan prepend AS-Path. Open tiket ke NOC Upstream.'
+            },
+            {
+              id: 'p503',
+              timestamp: hrsAgo(5.8),
+              stage: 'RFO / Verification',
+              pic: 'NOC IP Routing L3',
+              note: 'Upstream SG1 mengonfirmasi perbaikan linecard selesai. Sesi BGP stabil tanpa flap selama 30 menit observasi.'
+            },
+            {
+              id: 'p504',
+              timestamp: hrsAgo(5.4),
+              stage: 'Resolved / Up',
+              pic: 'NOC IP Routing L3',
+              note: 'Traffic dikembalikan normal ke primary SG1. Latency kembali normal 14ms, packet loss 0%. Tiket Resolved.'
+            }
+          ]
+        }
+      ];
+    }
+
+    /**
+     * ==================== LOAD & SAVE LOCALSTORAGE ====================
+     */
+    function loadAllData() {
+      try {
+        const rawTypes = localStorage.getItem(TYPES_STORAGE_KEY);
+        if (!rawTypes) {
+          ticketTypes = getDefaultTypes();
+          saveTypes();
+        } else {
+          const parsed = JSON.parse(rawTypes);
+          ticketTypes = Array.isArray(parsed) && parsed.length > 0 ? parsed : getDefaultTypes();
+        }
+      } catch (e) {
+        console.error('Gagal load types:', e);
+        ticketTypes = getDefaultTypes();
+      }
+
+      try {
+        const rawTickets = localStorage.getItem(TICKETS_STORAGE_KEY);
+        if (!rawTickets) {
+          tickets = getSampleTickets();
+          saveTickets();
+        } else {
+          const parsed = JSON.parse(rawTickets);
+          tickets = Array.isArray(parsed) ? parsed : getSampleTickets();
+          // Pastikan setiap tiket memiliki array progressList
+          tickets.forEach((t) => {
+            if (!Array.isArray(t.progressList)) t.progressList = [];
+            if (!Array.isArray(t.impacts)) t.impacts = [];
+          });
+        }
+      } catch (e) {
+        console.error('Gagal load tickets:', e);
+        tickets = getSampleTickets();
+      }
+    }
+
+    function saveTypes() {
+      try {
+        localStorage.setItem(TYPES_STORAGE_KEY, JSON.stringify(ticketTypes));
+      } catch (e) {
+        console.error('Gagal simpan types:', e);
+      }
+    }
+
+    function saveTickets() {
+      try {
+        localStorage.setItem(TICKETS_STORAGE_KEY, JSON.stringify(tickets));
+      } catch (e) {
+        console.error('Gagal simpan tickets:', e);
+        showToast('Gagal menyimpan data ke browser.', 'error');
+      }
+    }
+
+    /**
+     * ==================== HELPER UTILITAS ====================
+     */
+    function escapeHtml(val) {
+      if (val === null || val === undefined) return '';
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatNumber(n) {
+      return Number(n || 0).toLocaleString('id-ID');
+    }
+
+    function formatDateTimeWIB(isoStr) {
+      if (!isoStr) return '-';
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '-';
+      const datePart = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timePart = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+      return `${datePart}, ${timePart} WIB`;
+    }
+
+    function formatTimeOnlyWIB(isoStr) {
+      if (!isoStr) return '-';
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }) + ' WIB';
+    }
+
+    function toDateTimeLocalValue(isoStr) {
+      const d = isoStr ? new Date(isoStr) : new Date();
+      if (isNaN(d.getTime())) return '';
+      const pad = (x) => String(x).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function getSortedProgress(progressList) {
+      return [...(progressList || [])].sort((a, b) => {
+        const ta = new Date(a.timestamp).getTime() || 0;
+        const tb = new Date(b.timestamp).getTime() || 0;
+        return ta - tb;
+      });
+    }
+
+    function calcDuration(startTime, resolvedTime, status) {
+      const start = new Date(startTime).getTime();
+      if (isNaN(start)) return { text: '-', label: '', colorClass: 'text-slate-400' };
+
+      const isDone = DONE_STATUSES.includes(status);
+      const end = (isDone && resolvedTime) ? new Date(resolvedTime).getTime() : Date.now();
+      const diffMs = Math.max(0, end - start);
+      const totalMins = Math.floor(diffMs / 60000);
+      const days = Math.floor(totalMins / 1440);
+      const hrs = Math.floor((totalMins % 1440) / 60);
+      const mins = totalMins % 60;
+
+      let text = '';
+      if (days > 0) text = `${days}h ${hrs}j ${mins}m`;
+      else if (hrs > 0) text = `${hrs}j ${mins}m`;
+      else text = `${mins}m`;
+
+      let colorClass = 'text-cyan-300';
+      if (isDone) colorClass = 'text-emerald-400';
+      else if (totalMins >= 240) colorClass = 'text-rose-400 font-semibold';
+      else if (totalMins >= 120) colorClass = 'text-amber-400 font-medium';
+
+      return { text, label: isDone ? 'MTTR' : 'Downtime', colorClass };
+    }
+
+    function generateTicketNumber() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const prefix = `BBG-${y}${m}${d}-`;
+
+      let maxSeq = 0;
+      tickets.forEach((t) => {
+        if (t.id.startsWith(prefix)) {
+          const seq = parseInt(t.id.slice(prefix.length), 10);
+          if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        }
+      });
+      return prefix + String(maxSeq + 1).padStart(3, '0');
+    }
+
+    /**
+     * ==================== BADGES & DROPDOWN TIPE ====================
+     */
+    function getTypeBadge(typeName) {
+      const found = ticketTypes.find((t) => t.name === typeName);
+      const colorKey = found && TYPE_COLOR_PALETTE[found.color] ? found.color : 'cyan';
+      const palette = TYPE_COLOR_PALETTE[colorKey];
+      return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border ${palette.badge}">
+        <span class="w-1.5 h-1.5 rounded-full ${palette.dot}"></span>
+        <span>${escapeHtml(typeName)}</span>
+      </span>`;
+    }
+
+    function getPriorityBadge(priority) {
+      const map = {
+        'Critical': 'bg-rose-500/15 text-rose-400 border-rose-500/40 glow-critical',
+        'High': 'bg-orange-500/15 text-orange-400 border-orange-500/35',
+        'Medium': 'bg-amber-500/15 text-amber-300 border-amber-500/35',
+        'Low': 'bg-slate-700/70 text-slate-300 border-slate-600'
+      };
+      const pulse = priority === 'Critical'
+        ? '<span class="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping mr-1.5"></span>'
+        : '';
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${map[priority] || map['Medium']}">${pulse}${escapeHtml(priority)}</span>`;
+    }
+
+    function getStatusBadge(status) {
+      const map = {
+        'Open': 'bg-rose-500/15 text-rose-300 border-rose-500/35',
+        'In Progress': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
+        'Escalated': 'bg-orange-500/15 text-orange-300 border-orange-500/40',
+        'Pending': 'bg-amber-500/15 text-amber-300 border-amber-500/35',
+        'Resolved': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
+        'Closed': 'bg-slate-700/70 text-slate-300 border-slate-600'
+      };
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${map[status] || map['Open']}">${escapeHtml(status)}</span>`;
+    }
+
+    function getStageBadge(stage) {
+      const cls = STAGE_BADGE_MAP[stage] || STAGE_BADGE_MAP['Update'];
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${cls}">${escapeHtml(stage)}</span>`;
+    }
+
+    function renderAllTypeDropdowns(preserveFilterVal, preserveFormVal) {
+      const filterSelect = document.getElementById('filterType');
+      const formSelect = document.getElementById('inType');
+
+      const targetFilter = preserveFilterVal !== undefined ? preserveFilterVal : (filterSelect.value || 'ALL');
+      const targetForm = preserveFormVal !== undefined ? preserveFormVal : (formSelect.value || ticketTypes[0]?.name || 'Backbone');
+
+      filterSelect.innerHTML = [
+        `<option value="ALL">Tipe: Semua</option>`,
+        ...ticketTypes.map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`),
+        `<option value="${MANAGE_TYPE_OPTION_VALUE}" class="text-cyan-400 font-semibold">+ Tambah Tipe Baru...</option>`
+      ].join('');
+
+      const filterValid = targetFilter === 'ALL' || ticketTypes.some((t) => t.name === targetFilter);
+      filterSelect.value = filterValid ? targetFilter : 'ALL';
+      lastFilterTypeVal = filterSelect.value;
+
+      formSelect.innerHTML = [
+        ...ticketTypes.map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`),
+        `<option value="${MANAGE_TYPE_OPTION_VALUE}" class="text-cyan-400 font-semibold">+ Tambah Tipe Baru...</option>`
+      ].join('');
+
+      const formValid = ticketTypes.some((t) => t.name === targetForm);
+      formSelect.value = formValid ? targetForm : (ticketTypes[0]?.name || 'Backbone');
+      lastFormTypeVal = formSelect.value;
+    }
+
+    /**
+     * ==================== MANAJEMEN TIPE DINAMIS (TAMBAH, EDIT, HAPUS) ====================
+     */
+    function renderColorPicker() {
+      const grid = document.getElementById('colorPickerGrid');
+      grid.innerHTML = Object.entries(TYPE_COLOR_PALETTE).map(([key, cfg]) => {
+        const isSelected = key === selectedTypeColor;
+        const ring = isSelected
+          ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-950 border-white/70'
+          : 'border-slate-700 hover:border-slate-500';
+        return `
+          <button
+            type="button"
+            onclick="selectTypeColor('${key}')"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 border transition-all cursor-pointer ${ring}"
+          >
+            <span class="w-2.5 h-2.5 rounded-full ${cfg.dot}"></span>
+            <span class="text-slate-200">${cfg.label}</span>
+          </button>
+        `;
+      }).join('');
+      updateTypeLivePreview();
+    }
+
+    function selectTypeColor(colorKey) {
+      selectedTypeColor = colorKey;
+      renderColorPicker();
+    }
+
+    function updateTypeLivePreview() {
+      const nameVal = document.getElementById('typeNameInput').value.trim() || 'Nama Tipe';
+      const palette = TYPE_COLOR_PALETTE[selectedTypeColor] || TYPE_COLOR_PALETTE.cyan;
+      document.getElementById('typeLivePreview').innerHTML = `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-semibold border ${palette.badge}">
+          <span class="w-1.5 h-1.5 rounded-full ${palette.dot}"></span>
+          <span>${escapeHtml(nameVal)}</span>
+        </span>
+      `;
+    }
+
+    function startEditType(index) {
+      const target = ticketTypes[index];
+      if (!target) return;
+
+      editingTypeIndex = index;
+      selectedTypeColor = TYPE_COLOR_PALETTE[target.color] ? target.color : 'cyan';
+
+      const formBox = document.getElementById('typeForm');
+      formBox.classList.remove('border-slate-800');
+      formBox.classList.add('border-amber-500/50');
+
+      document.getElementById('typeFormTitle').textContent = `Edit Tipe: "${target.name}"`;
+      document.getElementById('typeFormTitle').classList.remove('text-cyan-400');
+      document.getElementById('typeFormTitle').classList.add('text-amber-400');
+      document.getElementById('typeEditBadge').classList.remove('hidden');
+
+      document.getElementById('typeNameInput').value = target.name;
+      document.getElementById('btnCancelTypeEdit').classList.remove('hidden');
+      document.getElementById('btnSubmitTypeLabel').textContent = 'Simpan Perubahan';
+
+      renderColorPicker();
+      renderTypeListInModal();
+      document.getElementById('typeNameInput').focus();
+      document.getElementById('typeNameInput').select();
+    }
+
+    function cancelTypeEditMode() {
+      editingTypeIndex = null;
+      selectedTypeColor = 'cyan';
+
+      const formBox = document.getElementById('typeForm');
+      formBox.classList.remove('border-amber-500/50');
+      formBox.classList.add('border-slate-800');
+
+      document.getElementById('typeFormTitle').textContent = 'Tambah Tipe Baru';
+      document.getElementById('typeFormTitle').classList.remove('text-amber-400');
+      document.getElementById('typeFormTitle').classList.add('text-cyan-400');
+      document.getElementById('typeEditBadge').classList.add('hidden');
+
+      document.getElementById('typeNameInput').value = '';
+      document.getElementById('btnCancelTypeEdit').classList.add('hidden');
+      document.getElementById('btnSubmitTypeLabel').textContent = 'Tambah Tipe';
+
+      renderColorPicker();
+      renderTypeListInModal();
+    }
+
+    function renderTypeListInModal() {
+      const container = document.getElementById('typeListContainer');
+      document.getElementById('totalTypesCount').textContent = `${ticketTypes.length} tipe`;
+
+      container.innerHTML = ticketTypes.map((t, idx) => {
+        const usageCount = tickets.filter((tk) => tk.type === t.name).length;
+        const isEditingThis = editingTypeIndex === idx;
+        const rowHighlight = isEditingThis ? 'bg-amber-500/10' : 'hover:bg-slate-800/40';
+        const defaultTag = t.isDefault
+          ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Default</span>`
+          : '';
+
+        const deleteBtn = !t.isDefault
+          ? `<button type="button" onclick="requestDeleteType(${idx})" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 border border-transparent hover:border-rose-500/30 transition-colors cursor-pointer" title="Hapus tipe">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>`
+          : `<span class="p-1.5 text-slate-700 cursor-not-allowed" title="Tipe default dapat diedit nama/warnanya, tidak dapat dihapus">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </span>`;
+
+        return `
+          <div class="px-3.5 py-2.5 flex items-center justify-between gap-3 transition-colors ${rowHighlight}">
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+              ${getTypeBadge(t.name)}
+              ${defaultTag}
+              <span class="text-[11px] font-mono text-slate-400">${usageCount} tiket</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" onclick="startEditType(${idx})" class="p-1.5 rounded-lg ${isEditingThis ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'text-slate-400 hover:text-amber-300 hover:bg-amber-500/15 border-transparent hover:border-amber-500/30'} border transition-colors cursor-pointer" title="Edit tipe">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              ${deleteBtn}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openTypeModal(source = 'button') {
+      typeModalSource = source;
+      cancelTypeEditMode();
+      document.getElementById('typeModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('typeNameInput').focus(), 40);
+    }
+
+    function closeTypeModal() {
+      document.getElementById('typeModal').classList.add('hidden');
+      editingTypeIndex = null;
+    }
+
+    function requestDeleteType(index) {
+      const target = ticketTypes[index];
+      if (!target || target.isDefault) return;
+
+      const usedTickets = tickets.filter((tk) => tk.type === target.name);
+      const fallbackType = ticketTypes[0]?.name || 'Backbone';
+      const msg = usedTickets.length > 0
+        ? `Tipe "${target.name}" masih dipakai oleh ${usedTickets.length} tiket. Jika dihapus, tiket-tiket tersebut akan dipindahkan otomatis ke "${fallbackType}". Lanjutkan?`
+        : `Yakin ingin menghapus tipe "${target.name}"?`;
+
+      openConfirmModal('Hapus Tipe Tiket?', msg, () => {
+        if (usedTickets.length > 0) {
+          tickets.forEach((tk) => {
+            if (tk.type === target.name) tk.type = fallbackType;
+          });
+          saveTickets();
+        }
+        if (editingTypeIndex === index) cancelTypeEditMode();
+        else if (editingTypeIndex !== null && editingTypeIndex > index) editingTypeIndex--;
+
+        ticketTypes.splice(index, 1);
+        saveTypes();
+
+        const nextFilter = lastFilterTypeVal === target.name ? 'ALL' : lastFilterTypeVal;
+        const nextForm = lastFormTypeVal === target.name ? fallbackType : lastFormTypeVal;
+        renderAllTypeDropdowns(nextFilter, nextForm);
+        renderTypeListInModal();
+        renderTable();
+        if (activeDetailId) {
+          const t = tickets.find((x) => x.id === activeDetailId);
+          if (t) populateDetailModal(t);
+        }
+        showToast(`Tipe "${target.name}" dihapus.`, 'info');
+      });
+    }
+
+    document.getElementById('typeNameInput').addEventListener('input', updateTypeLivePreview);
+
+    document.getElementById('typeForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const rawName = document.getElementById('typeNameInput').value.trim();
+      if (!rawName) return;
+
+      if (editingTypeIndex !== null) {
+        const duplicate = ticketTypes.some(
+          (t, idx) => idx !== editingTypeIndex && t.name.toLowerCase() === rawName.toLowerCase()
+        );
+        if (duplicate) {
+          showToast(`Nama tipe "${rawName}" sudah digunakan.`, 'error');
+          return;
+        }
+
+        const oldType = ticketTypes[editingTypeIndex];
+        const oldName = oldType.name;
+        let synced = 0;
+
+        ticketTypes[editingTypeIndex] = { ...oldType, name: rawName, color: selectedTypeColor };
+        saveTypes();
+
+        if (oldName !== rawName) {
+          tickets.forEach((tk) => {
+            if (tk.type === oldName) {
+              tk.type = rawName;
+              synced++;
+            }
+          });
+          saveTickets();
+        }
+
+        const nextFilter = lastFilterTypeVal === oldName ? rawName : lastFilterTypeVal;
+        const nextForm = (typeModalSource === 'form' || lastFormTypeVal === oldName) ? rawName : lastFormTypeVal;
+        renderAllTypeDropdowns(nextFilter, nextForm);
+        renderTable();
+        if (activeDetailId) {
+          const t = tickets.find((x) => x.id === activeDetailId);
+          if (t) populateDetailModal(t);
+        }
+        showToast(`Tipe "${rawName}" diperbarui${synced > 0 ? ` (${synced} tiket disinkronkan)` : ''}.`, 'success');
+        if (typeModalSource === 'form') closeTypeModal();
+        else cancelTypeEditMode();
+      } else {
+        const duplicate = ticketTypes.some((t) => t.name.toLowerCase() === rawName.toLowerCase());
+        if (duplicate) {
+          showToast(`Tipe "${rawName}" sudah ada.`, 'error');
+          return;
+        }
+        const newType = { name: rawName, color: selectedTypeColor, isDefault: false };
+        ticketTypes.push(newType);
+        saveTypes();
+
+        if (typeModalSource === 'form') {
+          renderAllTypeDropdowns(lastFilterTypeVal, newType.name);
+          closeTypeModal();
+          showToast(`Tipe "${newType.name}" ditambahkan dan dipilih.`, 'success');
+        } else {
+          renderAllTypeDropdowns(lastFilterTypeVal, lastFormTypeVal);
+          cancelTypeEditMode();
+          showToast(`Tipe "${newType.name}" berhasil ditambahkan.`, 'success');
+        }
+        renderTable();
+      }
+    });
+
+    document.getElementById('filterType').addEventListener('change', (e) => {
+      if (e.target.value === MANAGE_TYPE_OPTION_VALUE) {
+        e.target.value = lastFilterTypeVal;
+        openTypeModal('filter');
+        return;
+      }
+      lastFilterTypeVal = e.target.value;
+      renderTable();
+    });
+
+    document.getElementById('inType').addEventListener('change', (e) => {
+      if (e.target.value === MANAGE_TYPE_OPTION_VALUE) {
+        e.target.value = lastFormTypeVal;
+        openTypeModal('form');
+        return;
+      }
+      lastFormTypeVal = e.target.value;
+    });
+
+    document.getElementById('btnManageTypes').addEventListener('click', () => openTypeModal('button'));
+
+    /**
+     * ==================== FILTER, KPI, DAN RENDER TABEL UTAMA ====================
+     */
+    function getFilteredTickets() {
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      const type = document.getElementById('filterType').value;
+      const status = document.getElementById('filterStatus').value;
+      const priority = document.getElementById('filterPriority').value;
+
+      return tickets.filter((t) => {
+        const impactText = (t.impacts || []).join(' ').toLowerCase();
+        const progText = (t.progressList || []).map((p) => `${p.stage} ${p.pic} ${p.note}`).join(' ').toLowerCase();
+        const matchQ = !q || [
+          t.id, t.type, t.segment, t.location, t.rca, t.actionTaken, t.technician, impactText, progText
+        ].some((field) => String(field || '').toLowerCase().includes(q));
+
+        const matchType = type === 'ALL' || t.type === type;
+        const matchPriority = priority === 'ALL' || t.priority === priority;
+
+        let matchStatus = true;
+        if (status === 'ACTIVE_GROUP') matchStatus = ACTIVE_STATUSES.includes(t.status);
+        else if (status === 'RESOLVED_GROUP') matchStatus = DONE_STATUSES.includes(t.status);
+        else if (status !== 'ALL') matchStatus = t.status === status;
+
+        return matchQ && matchType && matchStatus && matchPriority;
+      });
+    }
+
+    function renderKPIs() {
+      const total = tickets.length;
+      const activeList = tickets.filter((t) => ACTIVE_STATUSES.includes(t.status));
+      const criticalActive = tickets.filter((t) => ACTIVE_STATUSES.includes(t.status) && t.priority === 'Critical');
+      const resolvedList = tickets.filter((t) => DONE_STATUSES.includes(t.status));
+
+      const totalImpactNodes = activeList.reduce((sum, t) => sum + (t.impacts || []).length, 0);
+      const totalImpactSubs = activeList.reduce((sum, t) => sum + Number(t.impactSubs || 0), 0);
+
+      document.getElementById('kpiTotal').textContent = total;
+      document.getElementById('kpiActive').textContent = activeList.length;
+      document.getElementById('kpiCritical').textContent = criticalActive.length;
+      document.getElementById('kpiImpactNodes').textContent = formatNumber(totalImpactNodes);
+      document.getElementById('kpiImpactSubs').textContent = `~${formatNumber(totalImpactSubs)} pelanggan/link`;
+      document.getElementById('kpiResolved').textContent = resolvedList.length;
+    }
+
+    function renderTable() {
+      renderKPIs();
+      const list = getFilteredTickets();
+      const tbody = document.getElementById('ticketTableBody');
+      const emptyState = document.getElementById('emptyState');
+
+      document.getElementById('filterSummary').textContent = `Menampilkan ${list.length} dari ${tickets.length} tiket`;
+
+      if (list.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      tbody.innerHTML = list.map((t) => {
+        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const impacts = Array.isArray(t.impacts) ? t.impacts : [];
+        const visibleImpacts = impacts.slice(0, 3);
+        const remainingCount = impacts.length - visibleImpacts.length;
+
+        const impactChipsHtml = visibleImpacts.length > 0
+          ? visibleImpacts.map((item) => `
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800/95 text-cyan-200 border border-slate-700/90">
+                ${escapeHtml(item)}
+              </span>
+            `).join('')
+          : `<span class="text-xs text-slate-500 italic">Belum ada impact</span>`;
+
+        const moreBadgeHtml = remainingCount > 0
+          ? `<button type="button" onclick="event.stopPropagation(); openDetailModal('${escapeHtml(t.id)}')" class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors cursor-pointer">+${remainingCount} lainnya</button>`
+          : '';
+
+        const subsHtml = Number(t.impactSubs || 0) > 0
+          ? `<div class="mt-1.5 flex items-center gap-1.5 text-[11px] font-mono text-amber-300/90">
+               <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+               <span>Est. ${formatNumber(t.impactSubs)} pelanggan/link</span>
+             </div>`
+          : '';
+
+        // Data Kolom List Progress / CIR
+        const sortedProg = getSortedProgress(t.progressList);
+        const progCount = sortedProg.length;
+        const latestProg = progCount > 0 ? sortedProg[progCount - 1] : null;
+        const latestProgHtml = latestProg
+          ? `<div class="mt-1.5 text-[11px] text-slate-300 line-clamp-2 leading-snug" title="${escapeHtml(latestProg.note)}">
+               <span class="font-mono text-amber-300/90">[${formatTimeOnlyWIB(latestProg.timestamp)}]</span>
+               <span class="font-semibold text-slate-200">${escapeHtml(latestProg.stage)}:</span>
+               ${escapeHtml(latestProg.note)}
+             </div>`
+          : `<div class="mt-1.5 text-[11px] text-slate-500 italic">Belum ada catatan progress CIR.</div>`;
+
+        return `
+          <tr onclick="openDetailModal('${escapeHtml(t.id)}')" class="hover:bg-slate-800/40 transition-colors cursor-pointer group align-top">
+            <!-- No. Tiket & MTTR -->
+            <td class="py-3.5 px-4 whitespace-nowrap">
+              <div class="font-mono text-xs font-bold text-cyan-400 group-hover:text-cyan-300">${escapeHtml(t.id)}</div>
+              <div class="font-mono text-[11px] text-slate-400 mt-1">${formatDateTimeWIB(t.startTime)}</div>
+              <div class="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950 border border-slate-800 font-mono text-[11px]">
+                <span class="text-slate-500">${dur.label}:</span>
+                <span class="${dur.colorClass}">${dur.text}</span>
+              </div>
+            </td>
+
+            <!-- Tipe & Prioritas -->
+            <td class="py-3.5 px-4 whitespace-nowrap space-y-1.5">
+              <div>${getTypeBadge(t.type)}</div>
+              <div>${getPriorityBadge(t.priority)}</div>
+            </td>
+
+            <!-- Segmen / Link / Lokasi & PIC -->
+            <td class="py-3.5 px-4 max-w-[270px]">
+              <div class="text-xs sm:text-sm font-semibold text-slate-100 leading-snug">${escapeHtml(t.segment)}</div>
+              <div class="font-mono text-[11px] text-amber-300/80 mt-1 truncate" title="${escapeHtml(t.location)}">📍 ${escapeHtml(t.location)}</div>
+              <div class="text-[11px] text-slate-400 mt-1 truncate" title="${escapeHtml(t.technician)}">👤 ${escapeHtml(t.technician || '-')}</div>
+            </td>
+
+            <!-- Kolom List Impact -->
+            <td class="py-3.5 px-4 bg-cyan-950/10 border-x border-slate-800 max-w-[290px]">
+              <div class="flex flex-wrap gap-1.5">
+                ${impactChipsHtml}
+                ${moreBadgeHtml}
+              </div>
+              ${subsHtml}
+            </td>
+
+            <!-- Kolom List Progress / CIR (BARU) -->
+            <td class="py-3.5 px-4 bg-amber-950/10 border-r border-slate-800 max-w-[300px]" onclick="event.stopPropagation()">
+              <div class="flex items-center justify-between gap-2">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <span>${progCount} Progress</span>
+                </span>
+                <button
+                  type="button"
+                  onclick="openCirModal('${escapeHtml(t.id)}')"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition-colors cursor-pointer"
+                  title="Buka Dokumen CIR Lengkap"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Lihat CIR</span>
+                </button>
+              </div>
+              ${latestProgHtml}
+            </td>
+
+            <!-- Status & Aksi -->
+            <td class="py-3.5 px-4 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+              <div class="mb-2">${getStatusBadge(t.status)}</div>
+              <div class="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onclick="openDetailModal('${escapeHtml(t.id)}')"
+                  class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-cyan-500/20 text-cyan-400 border border-slate-700 hover:border-cyan-500/40 transition-colors cursor-pointer"
+                  title="Detail &amp; Kelola Progress"
+                >
+                  Detail
+                </button>
+                <button
+                  type="button"
+                  onclick="copyWhatsAppReport('${escapeHtml(t.id)}')"
+                  class="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors cursor-pointer"
+                  title="Salin Laporan WA"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onclick="openEditModal('${escapeHtml(t.id)}')"
+                  class="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-amber-500/15 border border-transparent hover:border-amber-500/30 transition-colors cursor-pointer"
+                  title="Edit Tiket"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onclick="requestDeleteTicket('${escapeHtml(t.id)}')"
+                  class="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition-colors cursor-pointer"
+                  title="Hapus Tiket"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function applyQuickFilter(mode) {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('filterType').value = 'ALL';
+      lastFilterTypeVal = 'ALL';
+      document.getElementById('filterStatus').value = 'ALL';
+      document.getElementById('filterPriority').value = 'ALL';
+
+      if (mode === 'ACTIVE') document.getElementById('filterStatus').value = 'ACTIVE_GROUP';
+      else if (mode === 'CRITICAL') document.getElementById('filterPriority').value = 'Critical';
+      else if (mode === 'RESOLVED') document.getElementById('filterStatus').value = 'RESOLVED_GROUP';
+
+      renderTable();
+    }
+
+    /**
+     * ==================== MODAL BUAT / EDIT TIKET ====================
+     */
+    function renderFormImpactChips() {
+      const container = document.getElementById('formImpactChips');
+      document.getElementById('formImpactCount').textContent = `${formImpacts.length} item`;
+
+      if (formImpacts.length === 0) {
+        container.innerHTML = `<span class="text-xs text-slate-500 italic self-center">Belum ada item impact ditambahkan...</span>`;
+        return;
+      }
+
+      container.innerHTML = formImpacts.map((item, idx) => `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-cyan-500/15 text-cyan-200 border border-cyan-500/30">
+          <span>${escapeHtml(item)}</span>
+          <button type="button" onclick="removeFormImpact(${idx})" class="text-cyan-400 hover:text-rose-400 transition-colors cursor-pointer" title="Hapus item">&times;</button>
+        </span>
+      `).join('');
+    }
+
+    function addFormImpactsFromInput() {
+      const inputEl = document.getElementById('inImpactItem');
+      const raw = inputEl.value.trim();
+      if (!raw) return;
+
+      const items = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+      items.forEach((item) => {
+        if (!formImpacts.includes(item)) formImpacts.push(item);
+      });
+
+      inputEl.value = '';
+      renderFormImpactChips();
+      inputEl.focus();
+    }
+
+    function removeFormImpact(index) {
+      formImpacts.splice(index, 1);
+      renderFormImpactChips();
+    }
+
+    document.getElementById('btnAddImpactChip').addEventListener('click', addFormImpactsFromInput);
+    document.getElementById('inImpactItem').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addFormImpactsFromInput();
+      }
+    });
+
+    document.getElementById('inImpactItem').addEventListener('paste', (e) => {
+      const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      if (pasted && pasted.includes('\n')) {
+        e.preventDefault();
+        const items = pasted.split(/[\r\n,;]+/).map((s) => s.trim()).filter(Boolean);
+        items.forEach((item) => {
+          if (!formImpacts.includes(item)) formImpacts.push(item);
+        });
+        renderFormImpactChips();
+      }
+    });
+
+    document.getElementById('inStatus').addEventListener('change', (e) => {
+      const resInput = document.getElementById('inResolvedTime');
+      if (DONE_STATUSES.includes(e.target.value) && !resInput.value) {
+        resInput.value = toDateTimeLocalValue();
+      } else if (!DONE_STATUSES.includes(e.target.value)) {
+        resInput.value = '';
+      }
+    });
+
+    function openCreateModal() {
+      document.getElementById('ticketForm').reset();
+      document.getElementById('editTicketOrigId').value = '';
+      document.getElementById('formModalTitle').textContent = 'Buat Tiket Insiden Baru';
+      document.getElementById('formModalSub').textContent = 'No. Tiket terisi otomatis (BBG-YYYYMMDD-XXX) dan dapat diubah manual.';
+      document.getElementById('inTicketNo').value = generateTicketNumber();
+      document.getElementById('initialProgressBox').classList.remove('hidden');
+
+      renderAllTypeDropdowns(lastFilterTypeVal, ticketTypes[0]?.name || 'Backbone');
+      document.getElementById('inStartTime').value = toDateTimeLocalValue();
+      document.getElementById('inResolvedTime').value = '';
+      formImpacts = [];
+      renderFormImpactChips();
+      document.getElementById('formModal').classList.remove('hidden');
+      document.getElementById('inSegment').focus();
+    }
+
+    function openEditModal(ticketId) {
+      const t = tickets.find((item) => item.id === ticketId);
+      if (!t) return;
+
+      closeDetailModal();
+      document.getElementById('editTicketOrigId').value = t.id;
+      document.getElementById('formModalTitle').textContent = `Edit Tiket ${t.id}`;
+      document.getElementById('formModalSub').textContent = 'Perbarui informasi tiket, Tipe, List Impact, RCA, atau Action Taken.';
+      document.getElementById('inTicketNo').value = t.id;
+      document.getElementById('initialProgressBox').classList.add('hidden');
+
+      renderAllTypeDropdowns(lastFilterTypeVal, t.type);
+      const formSelect = document.getElementById('inType');
+      if (!ticketTypes.some((tp) => tp.name === t.type)) {
+        const opt = document.createElement('option');
+        opt.value = t.type;
+        opt.textContent = t.type;
+        formSelect.insertBefore(opt, formSelect.firstChild);
+        formSelect.value = t.type;
+      }
+      lastFormTypeVal = formSelect.value;
+
+      document.getElementById('inPriority').value = t.priority;
+      document.getElementById('inStatus').value = t.status;
+      document.getElementById('inSegment').value = t.segment;
+      document.getElementById('inLocation').value = t.location;
+      document.getElementById('inImpactSubs').value = t.impactSubs || 0;
+      document.getElementById('inTechnician').value = t.technician || '';
+      document.getElementById('inStartTime').value = toDateTimeLocalValue(t.startTime);
+      document.getElementById('inResolvedTime').value = t.resolvedTime ? toDateTimeLocalValue(t.resolvedTime) : '';
+      document.getElementById('inRca').value = t.rca || '';
+      document.getElementById('inActionTaken').value = t.actionTaken || '';
+
+      formImpacts = [...(t.impacts || [])];
+      renderFormImpactChips();
+      document.getElementById('formModal').classList.remove('hidden');
+    }
+
+    function closeFormModal() {
+      document.getElementById('formModal').classList.add('hidden');
+    }
+
+    document.getElementById('ticketForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      if (document.getElementById('inImpactItem').value.trim()) {
+        addFormImpactsFromInput();
+      }
+
+      const origId = document.getElementById('editTicketOrigId').value;
+      const ticketNo = document.getElementById('inTicketNo').value.trim() || generateTicketNumber();
+      const type = document.getElementById('inType').value;
+
+      if (type === MANAGE_TYPE_OPTION_VALUE) {
+        openTypeModal('form');
+        return;
+      }
+
+      const isDupId = tickets.some((t) => t.id.toLowerCase() === ticketNo.toLowerCase() && t.id !== origId);
+      if (isDupId) {
+        showToast(`No. Tiket "${ticketNo}" sudah terdaftar.`, 'error');
+        return;
+      }
+
+      const status = document.getElementById('inStatus').value;
+      const startVal = document.getElementById('inStartTime').value;
+      const resVal = document.getElementById('inResolvedTime').value;
+
+      const startIso = startVal ? new Date(startVal).toISOString() : new Date().toISOString();
+      let resolvedIso = resVal ? new Date(resVal).toISOString() : '';
+      if (DONE_STATUSES.includes(status) && !resolvedIso) {
+        resolvedIso = new Date().toISOString();
+      } else if (!DONE_STATUSES.includes(status)) {
+        resolvedIso = '';
+      }
+
+      const payload = {
+        id: ticketNo,
+        type,
+        priority: document.getElementById('inPriority').value,
+        status,
+        segment: document.getElementById('inSegment').value.trim(),
+        location: document.getElementById('inLocation').value.trim(),
+        impacts: [...formImpacts],
+        impactSubs: Math.max(0, parseInt(document.getElementById('inImpactSubs').value, 10) || 0),
+        technician: document.getElementById('inTechnician').value.trim(),
+        startTime: startIso,
+        resolvedTime: resolvedIso,
+        rca: document.getElementById('inRca').value.trim(),
+        actionTaken: document.getElementById('inActionTaken').value.trim()
+      };
+
+      if (origId) {
+        const idx = tickets.findIndex((t) => t.id === origId);
+        if (idx !== -1) {
+          tickets[idx] = { ...tickets[idx], ...payload };
+          saveTickets();
+          renderTable();
+          closeFormModal();
+          showToast(`Tiket ${payload.id} berhasil diperbarui.`, 'success');
+        }
+      } else {
+        const initProgNote = document.getElementById('inInitialProgress').value.trim();
+        const initStage = document.getElementById('inInitialStage').value;
+        const progressList = [
+          {
+            id: generateProgressId(),
+            timestamp: startIso,
+            stage: initStage || 'Alarm / Detection',
+            pic: payload.technician || 'NOC Operator',
+            note: initProgNote || `Tiket ${payload.type} (${payload.priority}) dibuka pada segmen ${payload.segment}. Status: ${payload.status}.`
+          }
+        ];
+
+        const newTicket = { ...payload, progressList };
+        tickets.unshift(newTicket);
+        saveTickets();
+        renderTable();
+        closeFormModal();
+        showToast(`Tiket ${newTicket.id} berhasil dibuat!`, 'success');
+      }
+    });
+
+    /**
+     * ==================== MODAL DETAIL TIKET & LIST PROGRESS (CIR) ====================
+     */
+    function openDetailModal(ticketId) {
+      const t = tickets.find((item) => item.id === ticketId);
+      if (!t) return;
+      activeDetailId = ticketId;
+      populateDetailModal(t);
+      resetProgressForm(t);
+      document.getElementById('detailModal').classList.remove('hidden');
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detailModal').classList.add('hidden');
+      activeDetailId = null;
+    }
+
+    function populateDetailModal(t) {
+      const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+
+      document.getElementById('detId').textContent = t.id;
+      document.getElementById('detTypeBadge').innerHTML = getTypeBadge(t.type);
+      document.getElementById('detPriorityBadge').innerHTML = getPriorityBadge(t.priority);
+      document.getElementById('detStatusBadge').innerHTML = getStatusBadge(t.status);
+      document.getElementById('detDuration').innerHTML = `<span class="text-slate-400">${dur.label}:</span> <span class="${dur.colorClass} font-bold">${dur.text}</span>`;
+
+      document.getElementById('detSegment').textContent = t.segment;
+      document.getElementById('detLocation').textContent = t.location;
+      document.getElementById('detTechnician').textContent = t.technician || '-';
+      document.getElementById('detImpactSubs').textContent = `~${formatNumber(t.impactSubs)} pelanggan/link`;
+      document.getElementById('detStartTime').textContent = formatDateTimeWIB(t.startTime);
+      document.getElementById('detResolvedTime').textContent = t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'Belum pulih';
+      document.getElementById('detQuickStatus').value = t.status;
+
+      document.getElementById('detRca').textContent = t.rca || 'Belum ada RCA.';
+      document.getElementById('detActionTaken').textContent = t.actionTaken || 'Belum ada catatan Action Taken.';
+
+      // List Impact
+      const impacts = t.impacts || [];
+      document.getElementById('detImpactBadgeCount').textContent = `${impacts.length} item`;
+      const impactListEl = document.getElementById('detImpactList');
+      if (impacts.length === 0) {
+        impactListEl.innerHTML = `<span class="text-xs text-slate-500 italic">Belum ada item impact.</span>`;
+      } else {
+        impactListEl.innerHTML = impacts.map((item, idx) => `
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-cyan-200 border border-slate-700">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+            <span>${escapeHtml(item)}</span>
+            <button type="button" onclick="removeImpactFromDetail(${idx})" class="ml-0.5 text-slate-400 hover:text-rose-400 cursor-pointer" title="Hapus impact">&times;</button>
+          </span>
+        `).join('');
+      }
+
+      // Render Timeline List Progress (diurutkan kronologis lama → baru agar sesuai CIR)
+      const sorted = getSortedProgress(t.progressList);
+      document.getElementById('detProgressCount').textContent = `${sorted.length} progress`;
+      const timelineEl = document.getElementById('detProgressTimeline');
+
+      if (sorted.length === 0) {
+        timelineEl.innerHTML = `<div class="text-center py-8 text-xs text-slate-500 italic">Belum ada catatan progress. Tambahkan progress pertama di atas untuk menyusun CIR.</div>`;
+      } else {
+        timelineEl.innerHTML = sorted.map((p, idx) => {
+          const isLast = idx === sorted.length - 1;
+          const dotCls = isLast
+            ? 'bg-amber-400 ring-4 ring-amber-500/20'
+            : 'bg-cyan-500/80';
+          return `
+            <div class="relative pl-6 border-l-2 border-slate-800 pb-1">
+              <span class="absolute -left-[6px] top-1.5 w-2.5 h-2.5 rounded-full ${dotCls}"></span>
+              <div class="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-3 transition-colors">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-mono text-[11px] font-bold text-slate-400">#${idx + 1}</span>
+                    <span class="font-mono text-[11px] text-amber-300 font-semibold">${formatDateTimeWIB(p.timestamp)}</span>
+                    ${getStageBadge(p.stage)}
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onclick="startEditProgress('${escapeHtml(p.id)}')"
+                      class="p-1 rounded text-slate-400 hover:text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer"
+                      title="Edit item progress"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onclick="requestDeleteProgress('${escapeHtml(p.id)}')"
+                      class="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
+                      title="Hapus item progress"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[11px] text-cyan-400/90 font-medium mb-1">PIC: ${escapeHtml(p.pic || '-')}</div>
+                <p class="text-xs text-slate-200 leading-relaxed whitespace-pre-line">${escapeHtml(p.note)}</p>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function resetProgressForm(ticketObj) {
+      const t = ticketObj || tickets.find((x) => x.id === activeDetailId);
+      document.getElementById('progEditId').value = '';
+      document.getElementById('progFormTitle').textContent = 'Tambah Progress Kronologi Baru';
+      document.getElementById('progFormTitle').classList.remove('text-amber-400');
+      document.getElementById('progFormTitle').classList.add('text-cyan-400');
+      document.getElementById('btnCancelProgEdit').classList.add('hidden');
+      document.getElementById('btnSubmitProg').textContent = '+ Tambah Progress';
+
+      document.getElementById('progTimestamp').value = toDateTimeLocalValue();
+      document.getElementById('progStage').value = 'Update';
+      document.getElementById('progPic').value = t ? (t.technician || 'NOC Operator') : 'NOC Operator';
+      document.getElementById('progNote').value = '';
+    }
+
+    function startEditProgress(progId) {
+      if (!activeDetailId) return;
+      const t = tickets.find((x) => x.id === activeDetailId);
+      if (!t) return;
+      const p = (t.progressList || []).find((item) => item.id === progId);
+      if (!p) return;
+
+      document.getElementById('progEditId').value = p.id;
+      document.getElementById('progFormTitle').textContent = 'Edit Item Progress Kronologi';
+      document.getElementById('progFormTitle').classList.remove('text-cyan-400');
+      document.getElementById('progFormTitle').classList.add('text-amber-400');
+      document.getElementById('btnCancelProgEdit').classList.remove('hidden');
+      document.getElementById('btnSubmitProg').textContent = 'Simpan Perubahan';
+
+      document.getElementById('progTimestamp').value = toDateTimeLocalValue(p.timestamp);
+      document.getElementById('progStage').value = p.stage || 'Update';
+      document.getElementById('progPic').value = p.pic || '';
+      document.getElementById('progNote').value = p.note || '';
+      document.getElementById('progNote').focus();
+    }
+
+    function requestDeleteProgress(progId) {
+      if (!activeDetailId) return;
+      const t = tickets.find((x) => x.id === activeDetailId);
+      if (!t) return;
+
+      openConfirmModal(
+        'Hapus Item Progress?',
+        'Item kronologi ini akan dihapus dari List Progress dan dokumen CIR tiket ini. Lanjutkan?',
+        () => {
+          t.progressList = (t.progressList || []).filter((p) => p.id !== progId);
+          saveTickets();
+          renderTable();
+          populateDetailModal(t);
+          resetProgressForm(t);
+          showToast('Item progress berhasil dihapus.', 'info');
+        }
+      );
+    }
+
+    document.getElementById('progressForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!activeDetailId) return;
+      const t = tickets.find((x) => x.id === activeDetailId);
+      if (!t) return;
+
+      const editId = document.getElementById('progEditId').value;
+      const tsVal = document.getElementById('progTimestamp').value;
+      const stage = document.getElementById('progStage').value;
+      const pic = document.getElementById('progPic').value.trim() || 'NOC Operator';
+      const note = document.getElementById('progNote').value.trim();
+
+      if (!note) return;
+      const tsIso = tsVal ? new Date(tsVal).toISOString() : new Date().toISOString();
+
+      if (editId) {
+        const idx = t.progressList.findIndex((p) => p.id === editId);
+        if (idx !== -1) {
+          t.progressList[idx] = { ...t.progressList[idx], timestamp: tsIso, stage, pic, note };
+          showToast('Item progress CIR berhasil diperbarui.', 'success');
+        }
+      } else {
+        t.progressList.push({
+          id: generateProgressId(),
+          timestamp: tsIso,
+          stage,
+          pic,
+          note
+        });
+        // Jika tahap yang ditambahkan adalah "Resolved / Up", otomatis set status Resolved bila belum
+        if (stage === 'Resolved / Up' && !DONE_STATUSES.includes(t.status)) {
+          t.status = 'Resolved';
+          t.resolvedTime = tsIso;
+        }
+        showToast('Progress baru ditambahkan ke kronologi CIR.', 'success');
+      }
+
+      saveTickets();
+      renderTable();
+      populateDetailModal(t);
+      resetProgressForm(t);
+    });
+
+    // Ubah status cepat di Modal Detail
+    document.getElementById('btnApplyQuickStatus').addEventListener('click', () => {
+      if (!activeDetailId) return;
+      const t = tickets.find((x) => x.id === activeDetailId);
+      if (!t) return;
+      const newStatus = document.getElementById('detQuickStatus').value;
+      if (t.status === newStatus) {
+        showToast('Status tiket sudah sama.', 'info');
+        return;
+      }
+
+      const oldStatus = t.status;
+      t.status = newStatus;
+      const nowIso = new Date().toISOString();
+      if (DONE_STATUSES.includes(newStatus) && !t.resolvedTime) {
+        t.resolvedTime = nowIso;
+      } else if (!DONE_STATUSES.includes(newStatus)) {
+        t.resolvedTime = '';
+      }
+
+      t.progressList.push({
+        id: generateProgressId(),
+        timestamp: nowIso,
+        stage: DONE_STATUSES.includes(newStatus) ? 'Resolved / Up' : 'Update',
+        pic: t.technician || 'NOC Operator',
+        note: `Status tiket diubah dari ${oldStatus} menjadi ${newStatus}.`
+      });
+
+      saveTickets();
+      renderTable();
+      populateDetailModal(t);
+      showToast(`Status tiket diubah ke ${newStatus}.`, 'success');
+    });
+
+    // Tambah / Hapus List Impact langsung dari Modal Detail
+    function addImpactFromDetail() {
+      if (!activeDetailId) return;
+      const t = tickets.find((x) => x.id === activeDetailId);
+      const inputEl = document.getElementById('detQuickImpactInput');
+      const raw = inputEl.value.trim();
+      if (!t || !raw) return;
+
+      const items = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+      let added = 0;
+      items.forEach((item) => {
+        if (!t.impacts.includes(item)) {
+          t.impacts.push(item);
+          added++;
+        }
+      });
+
+      if (added > 0) {
+        saveTickets();
+        renderTable();
+        populateDetailModal(t);
+        showToast(`${added} item ditambahkan ke List Impact.`, 'success');
+      }
+      inputEl.value = '';
+    }
+
+    function removeImpactFromDetail(index) {
+      if (!activeDetailId) return;
+      const t = tickets.find((x) => x.id === activeDetailId);
+      if (!t) return;
+      const removed = t.impacts.splice(index, 1)[0];
+      saveTickets();
+      renderTable();
+      populateDetailModal(t);
+      showToast(`"${removed}" dihapus dari List Impact.`, 'info');
+    }
+
+    document.getElementById('btnDetQuickAddImpact').addEventListener('click', addImpactFromDetail);
+    document.getElementById('detQuickImpactInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addImpactFromDetail();
+      }
+    });
+
+    document.getElementById('btnDetailEdit').addEventListener('click', () => {
+      if (activeDetailId) openEditModal(activeDetailId);
+    });
+    document.getElementById('btnDetailCopyWa').addEventListener('click', () => {
+      if (activeDetailId) copyWhatsAppReport(activeDetailId);
+    });
+    document.getElementById('btnDetailOpenCir').addEventListener('click', () => {
+      if (activeDetailId) openCirModal(activeDetailId);
+    });
+
+    /**
+     * ==================== MODAL KHUSUS "LIHAT CIR" (CHRONOLOGY OF INCIDENT REPORT) ====================
+     */
+    function openCirModal(ticketId) {
+      const t = tickets.find((x) => x.id === ticketId);
+      if (!t) return;
+      activeCirId = ticketId;
+
+      const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+      const sortedProg = getSortedProgress(t.progressList);
+
+      document.getElementById('cirDocId').textContent = t.id;
+      document.getElementById('cirDocBadges').innerHTML = `
+        ${getTypeBadge(t.type)}
+        ${getPriorityBadge(t.priority)}
+        ${getStatusBadge(t.status)}
+      `;
+      document.getElementById('cirGeneratedAt').textContent = `Dicetak: ${formatDateTimeWIB(new Date().toISOString())}`;
+
+      document.getElementById('cirSegment').textContent = t.segment;
+      document.getElementById('cirLocation').textContent = t.location;
+      document.getElementById('cirStartTime').textContent = formatDateTimeWIB(t.startTime);
+      document.getElementById('cirResolvedTime').textContent = t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'Masih Berlangsung (On-Going)';
+      document.getElementById('cirMttr').textContent = `${dur.text} (${dur.label})`;
+      document.getElementById('cirTechnician').textContent = t.technician || '-';
+      document.getElementById('cirImpactSubs').textContent = `~${formatNumber(t.impactSubs)} pelanggan / link terdampak`;
+
+      // Daftar Impact
+      const impacts = t.impacts || [];
+      document.getElementById('cirImpactCount').textContent = `${impacts.length} node/item`;
+      document.getElementById('cirImpactList').innerHTML = impacts.length > 0
+        ? impacts.map((item) => `
+            <span class="cir-chip inline-flex items-center px-2.5 py-1 rounded-md bg-slate-800 text-cyan-200 border border-slate-700 font-medium">
+              • ${escapeHtml(item)}
+            </span>
+          `).join('')
+        : `<span class="text-slate-500 italic">Tidak ada daftar impact tercatat.</span>`;
+
+      document.getElementById('cirRca').textContent = t.rca || 'Sedang dalam investigasi.';
+      document.getElementById('cirActionTaken').textContent = t.actionTaken || 'Penanganan sedang berlangsung.';
+
+      // Tabel Kronologi Progress (CIR)
+      document.getElementById('cirTableCount').textContent = `${sortedProg.length} langkah`;
+      const tbody = document.getElementById('cirChronologyBody');
+      if (sortedProg.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-6 px-4 text-center text-slate-500 italic">Belum ada data kronologi progress.</td></tr>`;
+      } else {
+        tbody.innerHTML = sortedProg.map((p, idx) => `
+          <tr>
+            <td class="py-2.5 px-3 text-center font-mono text-slate-400 align-top">${idx + 1}</td>
+            <td class="py-2.5 px-3 font-mono whitespace-nowrap text-amber-300 align-top">${formatDateTimeWIB(p.timestamp)}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap align-top">${getStageBadge(p.stage)}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap text-slate-300 align-top">${escapeHtml(p.pic || '-')}</td>
+            <td class="py-2.5 px-3 text-slate-200 leading-relaxed align-top whitespace-pre-line">${escapeHtml(p.note)}</td>
+          </tr>
+        `).join('');
+      }
+
+      document.getElementById('cirModal').classList.remove('hidden');
+    }
+
+    function closeCirModal() {
+      document.getElementById('cirModal').classList.add('hidden');
+      activeCirId = null;
+    }
+
+    /**
+     * Helper Copy Clipboard aman di iframe menggunakan document.execCommand('copy')
+     */
+    function copyTextToClipboard(text, successMsg) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) showToast(successMsg, 'success');
+        else showToast('Gagal menyalin ke clipboard.', 'error');
+      } catch (err) {
+        console.error('Copy error:', err);
+        showToast('Browser membatasi akses clipboard.', 'error');
+      }
+    }
+
+    /**
+     * Salin Teks CIR Lengkap (WA / Email) dari Modal CIR
+     */
+    document.getElementById('btnCopyCirText').addEventListener('click', () => {
+      if (!activeCirId) return;
+      const t = tickets.find((x) => x.id === activeCirId);
+      if (!t) return;
+
+      const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+      const sortedProg = getSortedProgress(t.progressList);
+      const impactLines = (t.impacts || []).length > 0
+        ? t.impacts.map((x) => `  • ${x}`).join('\n')
+        : '  • -';
+      const chronoLines = sortedProg.length > 0
+        ? sortedProg.map((p, i) => `${i + 1}. [${formatDateTimeWIB(p.timestamp)}] (${p.stage} - ${p.pic})\n   ${p.note}`).join('\n')
+        : '-';
+
+      const cirText = [
+        `*CHRONOLOGY OF INCIDENT REPORT (CIR)*`,
+        `========================================`,
+        `No. Tiket     : ${t.id}`,
+        `Tipe          : ${t.type}`,
+        `Prioritas     : ${t.priority}`,
+        `Status        : ${t.status}`,
+        `Segmen / Link : ${t.segment}`,
+        `Lokasi        : ${t.location}`,
+        `Waktu Mulai   : ${formatDateTimeWIB(t.startTime)}`,
+        `Waktu Selesai : ${t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'On-Going'}`,
+        `Total ${dur.label} : ${dur.text}`,
+        `PIC / Tim     : ${t.technician || '-'}`,
+        `Est. Impact   : ~${formatNumber(t.impactSubs)} pelanggan/link`,
+        `----------------------------------------`,
+        `*LIST IMPACT (${(t.impacts || []).length} Node/Item):*`,
+        impactLines,
+        `----------------------------------------`,
+        `*ROOT CAUSE ANALYSIS (RCA):*`,
+        `${t.rca || '-'}`,
+        ``,
+        `*ACTION TAKEN:*`,
+        `${t.actionTaken || '-'}`,
+        `----------------------------------------`,
+        `*KRONOLOGI PROGRESS (${sortedProg.length} Langkah):*`,
+        chronoLines,
+        `========================================`,
+        `_NOC Backbone & Gamas Ticketing System_`
+      ].join('\n');
+
+      copyTextToClipboard(cirText, `Dokumen Teks CIR (${t.id}) berhasil disalin!`);
+    });
+
+    /**
+     * Cetak / Simpan PDF CIR
+     */
+    document.getElementById('btnPrintCirPdf').addEventListener('click', () => {
+      window.print();
+    });
+
+    /**
+     * Salin Laporan WhatsApp Singkat + Kronologi Progress dari Tabel / Detail
+     */
+    function copyWhatsAppReport(ticketId) {
+      const t = tickets.find((x) => x.id === ticketId);
+      if (!t) return;
+
+      const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+      const sortedProg = getSortedProgress(t.progressList);
+      const impactBullets = (t.impacts || []).length > 0
+        ? t.impacts.map((item) => `  • ${item}`).join('\n')
+        : '  • -';
+      const shortChrono = sortedProg.length > 0
+        ? sortedProg.map((p) => `  • [${formatTimeOnlyWIB(p.timestamp)}] *${p.stage}*: ${p.note}`).join('\n')
+        : '  • -';
+
+      const waText = [
+        `*🚨 UPDATE NOC — ${t.type.toUpperCase()} (${t.priority})*`,
+        `==============================`,
+        `*No. Tiket*   : ${t.id}`,
+        `*Status*      : *${t.status}*`,
+        `*Waktu Mulai* : ${formatDateTimeWIB(t.startTime)}`,
+        `*${dur.label}* : ${dur.text}`,
+        `*Segmen*      : ${t.segment}`,
+        `*Lokasi*      : ${t.location}`,
+        `*PIC / Tim*   : ${t.technician || '-'}`,
+        `------------------------------`,
+        `*LIST IMPACT (${(t.impacts || []).length} Node | Est. ${formatNumber(t.impactSubs)} Subs):*`,
+        impactBullets,
+        `------------------------------`,
+        `*RCA*         : ${t.rca || '-'}`,
+        `*KRONOLOGI PROGRESS (CIR):*`,
+        shortChrono,
+        `==============================`,
+        `_Backbone & Gamas NOC Ticketing_`
+      ].join('\n');
+
+      copyTextToClipboard(waText, `Laporan WA + Progress tiket ${t.id} disalin!`);
+    }
+
+    /**
+     * ==================== EXPORT EXCEL (.XLSX) MULTI-SHEET (DATA_TIKET & KRONOLOGI_CIR) ====================
+     */
+    document.getElementById('btnExportExcel').addEventListener('click', () => {
+      const dataToExport = getFilteredTickets();
+      if (dataToExport.length === 0) {
+        showToast('Tidak ada data tiket untuk diekspor.', 'info');
+        return;
+      }
+
+      const dateStamp = new Date().toISOString().slice(0, 10);
+
+      // Sheet 1: Data_Tiket
+      const ticketRows = dataToExport.map((t) => {
+        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const sortedProg = getSortedProgress(t.progressList);
+        const cirSummary = sortedProg.map((p, i) => `${i + 1}. [${formatTimeOnlyWIB(p.timestamp)}] ${p.stage}: ${p.note}`).join(' | ');
+        return {
+          'No. Tiket': t.id,
+          'Tipe': t.type,
+          'Prioritas': t.priority,
+          'Status': t.status,
+          'Segmen / Link / Node': t.segment,
+          'Lokasi / OTDR': t.location,
+          'List Impact': (t.impacts || []).join('; '),
+          'Jml Node Impact': (t.impacts || []).length,
+          'Est. Pelanggan/Link': Number(t.impactSubs || 0),
+          'Waktu Mulai (WIB)': formatDateTimeWIB(t.startTime),
+          'Waktu Resolved (WIB)': t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : '-',
+          'Durasi / MTTR': dur.text,
+          'PIC / Tim': t.technician || '-',
+          'RCA': t.rca || '-',
+          'Action Taken': t.actionTaken || '-',
+          'Jml Progress': sortedProg.length,
+          'Ringkasan Progress / CIR': cirSummary || '-'
+        };
+      });
+
+      // Sheet 2: Kronologi_CIR (seluruh baris progressList dari semua tiket terfilter)
+      const cirRows = [];
+      dataToExport.forEach((t) => {
+        const sortedProg = getSortedProgress(t.progressList);
+        sortedProg.forEach((p, idx) => {
+          cirRows.push({
+            'No. Tiket': t.id,
+            'Tipe': t.type,
+            'Segmen / Link': t.segment,
+            'Urutan': idx + 1,
+            'Waktu (WIB)': formatDateTimeWIB(p.timestamp),
+            'Tahap (Stage)': p.stage,
+            'PIC / Operator': p.pic || '-',
+            'Deskripsi Progress': p.note
+          });
+        });
+      });
+
+      if (typeof XLSX !== 'undefined' && XLSX.utils) {
+        try {
+          const autoCols = (rows) => {
+            if (!rows || rows.length === 0) return [];
+            const keys = Object.keys(rows[0]);
+            return keys.map((k) => {
+              let maxLen = k.length;
+              rows.forEach((r) => {
+                const len = String(r[k] || '').length;
+                if (len > maxLen) maxLen = len;
+              });
+              return { wch: Math.min(Math.max(maxLen + 3, 12), 55) };
+            });
+          };
+
+          const wb = XLSX.utils.book_new();
+          const ws1 = XLSX.utils.json_to_sheet(ticketRows);
+          ws1['!cols'] = autoCols(ticketRows);
+          XLSX.utils.book_append_sheet(wb, ws1, 'Data_Tiket');
+
+          const ws2Data = cirRows.length > 0 ? cirRows : [{ 'Info': 'Belum ada data kronologi progress' }];
+          const ws2 = XLSX.utils.json_to_sheet(ws2Data);
+          ws2['!cols'] = autoCols(ws2Data);
+          XLSX.utils.book_append_sheet(wb, ws2, 'Kronologi_CIR');
+
+          XLSX.writeFile(wb, `NOC-Backbone-Gamas-CIR-${dateStamp}.xlsx`);
+          showToast(`Berhasil ekspor ${ticketRows.length} tiket & ${cirRows.length} baris CIR ke Excel (.xlsx)!`, 'success');
+          return;
+        } catch (err) {
+          console.error('SheetJS error, fallback ke CSV:', err);
+        }
+      }
+
+      // Fallback CSV UTF-8 BOM pemisah titik koma (;) agar rapi di Excel Indonesia
+      const headers = Object.keys(ticketRows[0]);
+      const csvEscape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const csvLines = [
+        headers.map(csvEscape).join(';'),
+        ...ticketRows.map((r) => headers.map((h) => csvEscape(r[h])).join(';'))
+      ];
+      const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `NOC-Backbone-Gamas-CIR-${dateStamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`${ticketRows.length} tiket diekspor ke CSV (pemisah ';').`, 'success');
+    });
+
+    /**
+     * ==================== KONFIRMASI KUSTOM & RESET DATA ====================
+     */
+    function openConfirmModal(title, message, onConfirm) {
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+      confirmCallback = onConfirm;
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.add('hidden');
+      confirmCallback = null;
+    }
+
+    document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirmModal);
+    document.getElementById('btnConfirmOk').addEventListener('click', () => {
+      if (typeof confirmCallback === 'function') confirmCallback();
+      closeConfirmModal();
+    });
+
+    function requestDeleteTicket(ticketId) {
+      openConfirmModal(
+        'Hapus Tiket Insiden?',
+        `Yakin ingin menghapus tiket ${ticketId} beserta seluruh List Impact dan riwayat CIR-nya?`,
+        () => {
+          tickets = tickets.filter((t) => t.id !== ticketId);
+          saveTickets();
+          renderTable();
+          showToast(`Tiket ${ticketId} telah dihapus.`, 'info');
+        }
+      );
+    }
+
+    document.getElementById('btnResetData').addEventListener('click', () => {
+      openConfirmModal(
+        'Reset Data & Tipe Default?',
+        'Seluruh data tiket dan tipe kustom akan dikembalikan ke 5 data contoh NOC beserta kronologi CIR bawaan. Lanjutkan?',
+        () => {
+          ticketTypes = getDefaultTypes();
+          tickets = getSampleTickets();
+          saveTypes();
+          saveTickets();
+          renderAllTypeDropdowns('ALL', ticketTypes[0].name);
+          applyQuickFilter('ALL');
+          showToast('Data contoh & kronologi CIR berhasil di-reset.', 'success');
+        }
+      );
+    });
+
+    /**
+     * ==================== TOAST NOTIFICATION ====================
+     */
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const borderMap = {
+        success: 'border-emerald-500/40',
+        error: 'border-rose-500/40',
+        info: 'border-cyan-500/40'
+      };
+      const dotMap = {
+        success: 'bg-emerald-400',
+        error: 'bg-rose-400',
+        info: 'bg-cyan-400'
+      };
+
+      const el = document.createElement('div');
+      el.className = `animate-toast pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-900 border shadow-2xl text-xs sm:text-sm font-medium text-slate-100 ${borderMap[type] || borderMap.info}`;
+      el.innerHTML = `
+        <span class="w-2 h-2 rounded-full shrink-0 ${dotMap[type] || dotMap.info}"></span>
+        <span>${escapeHtml(message)}</span>
+      `;
+      container.appendChild(el);
+
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.25s ease';
+        setTimeout(() => el.remove(), 250);
+      }, 3200);
+    }
+
+    /**
+     * ==================== JAM LIVE WIB & EVENT LISTENER ====================
+     */
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('nocClock').textContent = now.toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }) + ' WIB';
+    }
+
+    document.getElementById('btnOpenCreate').addEventListener('click', openCreateModal);
+    document.getElementById('btnUploadLogo').addEventListener('click', () => document.getElementById('logoFileInput').click());
+    document.getElementById('logoFileInput').addEventListener('change', handleLogoUpload);
+    document.getElementById('btnResetLogo').addEventListener('click', resetBrandLogo);
+    document.getElementById('searchInput').addEventListener('input', renderTable);
+    document.getElementById('filterStatus').addEventListener('change', renderTable);
+    document.getElementById('filterPriority').addEventListener('change', renderTable);
+    document.getElementById('btnClearFilter').addEventListener('click', () => applyQuickFilter('ALL'));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!document.getElementById('confirmModal').classList.contains('hidden')) closeConfirmModal();
+        else if (!document.getElementById('cirModal').classList.contains('hidden')) closeCirModal();
+        else if (!document.getElementById('typeModal').classList.contains('hidden')) closeTypeModal();
+        else {
+          closeFormModal();
+          closeDetailModal();
+        }
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadAllData();
+      renderBrandLogos();
+      renderAllTypeDropdowns('ALL', ticketTypes[0]?.name || 'Backbone');
+      renderTable();
+      updateClock();
+      setInterval(updateClock, 1000);
+      setInterval(renderTable, 60000);
+    });
+  </script>
+</body>
+</html>
