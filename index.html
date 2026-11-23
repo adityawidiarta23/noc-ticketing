@@ -888,7 +888,7 @@
             <div class="flex items-center gap-2.5">
               <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-500/15 text-blue-300 border border-blue-500/35 font-mono">RFO</span>
               <div>
-                <h2 class="text-sm sm:text-base font-bold text-white">Reason For Outage (RFO) — Kertas Putih Bersih A4</h2>
+                <h2 class="text-sm sm:text-base font-bold text-white">Reason For Outage (RFO)</h2>
                 <p class="text-[11px] text-slate-400">Edit cepat di panel kiri, lalu gunakan <strong>Download PDF (.pdf)</strong> atau <strong>Cetak / Print PDF</strong>.</p>
               </div>
             </div>
@@ -1436,10 +1436,31 @@
         ];
       }
 
-      /* ==================== LOCALSTORAGE DEFENSIF ('stf_noc_v5') ==================== */
-     /* ==================== SINKRONISASI GOOGLE DRIVE (SHEETS) + LOCALSTORAGE ==================== */
-      const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwWGTLslruQTGQ5bQ6dU6El9MeUTTJOFTrdKn5MtHZmRQRJZRxuMWHuJE84lPim3tAayw/exec';
+      /* ==================== SINKRONISASI API JSON (APPS SCRIPT + GOOGLE SHEETS) ==================== */
+      // Tempel URL Web App (diakhiri /exec) dari gas/Code.gs di sini.
+      const GAS_API_URL = '';
+      // Opsional: samakan dengan Script Property SYNC_TOKEN. Kosongkan jika tidak dipakai.
+      const SYNC_TOKEN = '';
+      const SYNC_META_KEY = 'stf_noc_v5_sync';
+      const SYNC_TIMEOUT_MS = 20000;
+      const SYNC_RETRY_MS = 30000;
+
+      let serverRev = 0;
+      let pendingPush = false;
+      let syncing = false;
       let syncTimer = null;
+      let retryTimer = null;
+
+      function isSyncConfigured() {
+        return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/(exec|dev)$/.test(GAS_API_URL.trim());
+      }
+
+      function apiUrl() {
+        const url = new URL(GAS_API_URL.trim());
+        if (SYNC_TOKEN) url.searchParams.set('token', SYNC_TOKEN);
+        url.searchParams.set('t', String(Date.now()));
+        return url.toString();
+      }
 
       function updateCloudBadge(text, sheetUrl) {
         let badge = document.getElementById('cloudSyncBadge');
@@ -1458,75 +1479,269 @@
         }
       }
 
-      async function pushStateToDrive() {
-        if (!GAS_API_URL || GAS_API_URL.includes('TEMPEL_')) return;
-        updateCloudBadge('⏳ Menyimpan ke Google Drive...');
+      function readSyncMeta() {
         try {
-          const res = await fetch(GAS_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(state)
-          });
-          const data = await res.json();
-          if (data.status === 'ok') {
-            updateCloudBadge(`☁️ Tersimpan di Drive (${data.count} tiket)`, data.sheetUrl);
-          } else {
-            updateCloudBadge('❌ Gagal simpan: ' + (data.message || 'Error'));
-          }
+          const meta = JSON.parse(localStorage.getItem(SYNC_META_KEY) || '{}');
+          serverRev = Number(meta.rev) || 0;
+          pendingPush = !!meta.dirty;
         } catch (err) {
-          console.error('Gagal kirim ke Google Drive:', err);
-          updateCloudBadge('⚠️ Offline (tersimpan lokal)');
+          serverRev = 0;
+          pendingPush = false;
         }
       }
 
-      async function pullStateFromDrive() {
-        if (!GAS_API_URL || GAS_API_URL.includes('TEMPEL_')) return;
-        updateCloudBadge('⏳ Sinkronisasi Google Drive...');
+      function writeSyncMeta(dirty) {
         try {
-          const res = await fetch(GAS_API_URL);
-          const data = await res.json();
-
-          if (data.status === 'ok') {
-            if (data.isEmpty) {
-              // Sheet masih kosong pertama kali -> upload data awal dari aplikasi
-              await pushStateToDrive();
-              return;
-            }
-            if (data.state) {
-              state.ticketTypes = (Array.isArray(data.state.ticketTypes) && data.state.ticketTypes.length > 0)
-                ? data.state.ticketTypes : getDefaultTicketTypes();
-              state.faultTypes = (Array.isArray(data.state.faultTypes) && data.state.faultTypes.length > 0)
-                ? data.state.faultTypes : getDefaultFaultTypes();
-              state.tickets = Array.isArray(data.state.tickets) ? data.state.tickets : [];
-
-              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-              renderAllCategoryDropdowns({
-                filterTicketType: 'ALL',
-                formTicketType: state.ticketTypes[0]?.name || 'Backbone',
-                filterFaultType: 'ALL',
-                formFaultType: state.faultTypes[0]?.name || 'FO Cut'
-              });
-              renderTable();
-              updateCloudBadge(`☁️ Terhubung ke Drive (${state.tickets.length} tiket)`, data.sheetUrl);
-            }
-          }
-        } catch (err) {
-          console.error('Gagal muat dari Google Drive:', err);
-          updateCloudBadge('⚠️ Mode lokal (gagal muat Drive)');
-        }
+          localStorage.setItem(SYNC_META_KEY, JSON.stringify({ rev: serverRev, dirty: !!dirty }));
+        } catch (err) {}
       }
 
-      function saveState() {
+      function persistLocal() {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (err) {
           console.error('Gagal menyimpan state ke localStorage:', err);
         }
-        clearTimeout(syncTimer);
-        syncTimer = setTimeout(pushStateToDrive, 500);
       }
 
+      function syncErrorText(err) {
+        const message = err && err.name === 'AbortError'
+          ? 'waktu habis'
+          : (err && err.message ? err.message : 'tidak diketahui');
+        return message.length > 70 ? message.slice(0, 70) + '...' : message;
+      }
+
+      async function requestSync(options) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+        try {
+          const res = await fetch(apiUrl(), { ...options, signal: controller.signal, cache: 'no-store' });
+          const text = await res.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (err) {
+            throw new Error(`Respons bukan JSON (HTTP ${res.status}). Pastikan URL /exec berasal dari gas/Code.gs.`);
+          }
+          if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+          if (data.status === 'error') throw new Error(data.message || 'API menolak permintaan.');
+          return data;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      function normalizeState(raw) {
+        const source = raw && typeof raw === 'object' ? raw : {};
+        const ticketTypes = (Array.isArray(source.ticketTypes) && source.ticketTypes.length > 0)
+          ? source.ticketTypes : getDefaultTicketTypes();
+        const faultTypes = (Array.isArray(source.faultTypes) && source.faultTypes.length > 0)
+          ? source.faultTypes : getDefaultFaultTypes();
+        const tickets = Array.isArray(source.tickets)
+          ? source.tickets
+              .filter((t) => t && typeof t === 'object')
+              .map((t) => ({
+                ...t,
+                type: t.type || ticketTypes[0]?.name || 'Backbone',
+                faultType: t.faultType || faultTypes[0]?.name || 'FO Cut',
+                impacts: Array.isArray(t.impacts) ? t.impacts : [],
+                progressList: Array.isArray(t.progressList) ? t.progressList : []
+              }))
+          : [];
+        return {
+          ticketTypes,
+          faultTypes,
+          tickets,
+          updatedAt: source.updatedAt || ''
+        };
+      }
+
+      function ticketRecency(ticket) {
+        const stamps = [ticket.startTime, ticket.resolvedTime, ticket.updatedAt];
+        (Array.isArray(ticket.progressList) ? ticket.progressList : []).forEach((p) => {
+          stamps.push(p && p.timestamp);
+        });
+        return stamps.reduce((max, value) => {
+          const time = Date.parse(value || '') || 0;
+          return time > max ? time : max;
+        }, 0);
+      }
+
+      function mergeStates(localState, remoteState) {
+        const remote = normalizeState(remoteState);
+        const local = normalizeState(localState);
+        const byId = new Map();
+
+        remote.tickets.forEach((ticket) => byId.set(ticket.id, ticket));
+        local.tickets.forEach((ticket) => {
+          const existing = byId.get(ticket.id);
+          if (!existing) {
+            byId.set(ticket.id, ticket);
+            return;
+          }
+          const localTime = ticketRecency(ticket);
+          const remoteTime = ticketRecency(existing);
+          if (localTime > remoteTime) {
+            byId.set(ticket.id, ticket);
+          } else if (localTime === remoteTime) {
+            if (JSON.stringify(ticket).length > JSON.stringify(existing).length) {
+              byId.set(ticket.id, ticket);
+            }
+          }
+        });
+
+        return {
+          ticketTypes: remote.ticketTypes,
+          faultTypes: remote.faultTypes,
+          tickets: Array.from(byId.values()),
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      function refreshUiAfterSync() {
+        renderAllCategoryDropdowns({
+          filterTicketType: lastFilterTicketType,
+          formTicketType: lastFormTicketType,
+          filterFaultType: lastFilterFaultType,
+          formFaultType: lastFormFaultType
+        });
+        renderTable();
+      }
+
+      async function pullStateFromDrive() {
+        if (!isSyncConfigured()) {
+          updateCloudBadge('⚠️ Sinkron belum dikonfigurasi - mode lokal');
+          return;
+        }
+
+        updateCloudBadge('⏳ Sinkronisasi Google Sheets...');
+        try {
+          const data = await requestSync({ method: 'GET' });
+
+          if (data.isEmpty) {
+            serverRev = Number(data.rev) || 0;
+            pendingPush = true;
+            writeSyncMeta(true);
+            updateCloudBadge('☁️ Sheets kosong - mengunggah data awal...');
+            await pushStateToDrive();
+            return;
+          }
+
+          state = pendingPush ? mergeStates(state, data.state) : normalizeState(data.state);
+          serverRev = Number(data.rev) || 0;
+          persistLocal();
+          writeSyncMeta(pendingPush);
+          refreshUiAfterSync();
+          updateCloudBadge(
+            `☁️ Terhubung ke Sheets (${state.tickets.length} tiket)`,
+            data.sheetUrl
+          );
+
+          if (pendingPush) schedulePush(800);
+        } catch (err) {
+          console.error('Gagal memuat dari Google Sheets:', err);
+          updateCloudBadge('⚠️ Mode lokal - ' + syncErrorText(err));
+          if (pendingPush) scheduleRetry();
+        }
+      }
+
+      async function pushStateToDrive() {
+        if (!isSyncConfigured()) {
+          updateCloudBadge('⚠️ Sinkron belum dikonfigurasi - mode lokal');
+          return;
+        }
+        if (syncing) {
+          pendingPush = true;
+          return;
+        }
+        if (!navigator.onLine) {
+          pendingPush = true;
+          writeSyncMeta(true);
+          updateCloudBadge('⚠️ Offline - perubahan menunggu sinkron');
+          scheduleRetry();
+          return;
+        }
+
+        syncing = true;
+        try {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            updateCloudBadge('⏳ Menyimpan ke Google Sheets...');
+            const data = await requestSync({
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({ token: SYNC_TOKEN, baseRev: serverRev, state })
+            });
+
+            if (data.status === 'conflict') {
+              state = data.state ? mergeStates(state, data.state) : normalizeState(state);
+              serverRev = Number(data.rev) || 0;
+              persistLocal();
+              writeSyncMeta(true);
+              refreshUiAfterSync();
+              showToast('Data digabung dengan revisi terbaru dari Google Sheets.', 'info');
+              continue;
+            }
+
+            serverRev = Number(data.rev) || serverRev + 1;
+            pendingPush = false;
+            writeSyncMeta(false);
+            clearTimeout(retryTimer);
+            const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            updateCloudBadge(`☁️ Tersimpan di Sheets (${data.count} tiket, ${jam})`, data.sheetUrl);
+            return;
+          }
+          throw new Error('Gagal menyimpan setelah beberapa percobaan.');
+        } catch (err) {
+          console.error('Gagal menyimpan ke Google Sheets:', err);
+          pendingPush = true;
+          writeSyncMeta(true);
+          updateCloudBadge('⚠️ Gagal simpan - ' + syncErrorText(err));
+          scheduleRetry();
+        } finally {
+          syncing = false;
+        }
+      }
+
+      function saveState() {
+        state.updatedAt = new Date().toISOString();
+        persistLocal();
+        pendingPush = true;
+        writeSyncMeta(true);
+        schedulePush(600);
+      }
+
+      function schedulePush(delay) {
+        clearTimeout(syncTimer);
+        if (!isSyncConfigured()) return;
+        syncTimer = setTimeout(() => {
+          if (pendingPush) pushStateToDrive();
+        }, delay);
+      }
+
+      function scheduleRetry() {
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          if (pendingPush && navigator.onLine) pushStateToDrive();
+        }, SYNC_RETRY_MS);
+      }
+
+      function flushPendingPush() {
+        if (!pendingPush || !isSyncConfigured()) return;
+        clearTimeout(syncTimer);
+        pushStateToDrive();
+      }
+
+      window.addEventListener('online', () => {
+        if (pendingPush) pushStateToDrive();
+        else pullStateFromDrive();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushPendingPush();
+      });
+      window.addEventListener('pagehide', flushPendingPush);
+
       function loadState() {
+        readSyncMeta();
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (!raw) {
@@ -3281,7 +3496,7 @@
       window.requestDeleteTicket = requestDeleteTicket;
 
       // Inisialisasi aplikasi
-      function initApp() {
+      async function initApp() {
         loadState();
         renderBrandLogos();
         renderAllCategoryDropdowns({
@@ -3291,7 +3506,8 @@
           formFaultType: state.faultTypes[0]?.name || 'FO Cut'
         });
         renderTable();
-        pullStateFromDrive();
+        await pullStateFromDrive();
+        if (pendingPush && isSyncConfigured()) await pushStateToDrive();
         updateClock();
         setInterval(updateClock, 1000);
         setInterval(renderTable, 60000);
