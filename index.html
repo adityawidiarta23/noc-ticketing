@@ -1437,12 +1437,93 @@
       }
 
       /* ==================== LOCALSTORAGE DEFENSIF ('stf_noc_v5') ==================== */
+     /* ==================== SINKRONISASI GOOGLE DRIVE (SHEETS) + LOCALSTORAGE ==================== */
+      const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwWGTLslruQTGQ5bQ6dU6El9MeUTTJOFTrdKn5MtHZmRQRJZRxuMWHuJE84lPim3tAayw/exec';
+      let syncTimer = null;
+
+      function updateCloudBadge(text, sheetUrl) {
+        let badge = document.getElementById('cloudSyncBadge');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.id = 'cloudSyncBadge';
+          badge.className = 'fixed bottom-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/95 border border-slate-700 text-xs text-slate-200 shadow-lg backdrop-blur-sm';
+          badge.innerHTML = '<span id="cloudSyncText"></span><a id="cloudSheetLink" href="#" target="_blank" class="hidden text-cyan-400 hover:underline font-medium">Buka Sheet</a>';
+          document.body.appendChild(badge);
+        }
+        document.getElementById('cloudSyncText').textContent = text;
+        const link = document.getElementById('cloudSheetLink');
+        if (sheetUrl && link) {
+          link.href = sheetUrl;
+          link.classList.remove('hidden');
+        }
+      }
+
+      async function pushStateToDrive() {
+        if (!GAS_API_URL || GAS_API_URL.includes('TEMPEL_')) return;
+        updateCloudBadge('⏳ Menyimpan ke Google Drive...');
+        try {
+          const res = await fetch(GAS_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(state)
+          });
+          const data = await res.json();
+          if (data.status === 'ok') {
+            updateCloudBadge(`☁️ Tersimpan di Drive (${data.count} tiket)`, data.sheetUrl);
+          } else {
+            updateCloudBadge('❌ Gagal simpan: ' + (data.message || 'Error'));
+          }
+        } catch (err) {
+          console.error('Gagal kirim ke Google Drive:', err);
+          updateCloudBadge('⚠️ Offline (tersimpan lokal)');
+        }
+      }
+
+      async function pullStateFromDrive() {
+        if (!GAS_API_URL || GAS_API_URL.includes('TEMPEL_')) return;
+        updateCloudBadge('⏳ Sinkronisasi Google Drive...');
+        try {
+          const res = await fetch(GAS_API_URL);
+          const data = await res.json();
+
+          if (data.status === 'ok') {
+            if (data.isEmpty) {
+              // Sheet masih kosong pertama kali -> upload data awal dari aplikasi
+              await pushStateToDrive();
+              return;
+            }
+            if (data.state) {
+              state.ticketTypes = (Array.isArray(data.state.ticketTypes) && data.state.ticketTypes.length > 0)
+                ? data.state.ticketTypes : getDefaultTicketTypes();
+              state.faultTypes = (Array.isArray(data.state.faultTypes) && data.state.faultTypes.length > 0)
+                ? data.state.faultTypes : getDefaultFaultTypes();
+              state.tickets = Array.isArray(data.state.tickets) ? data.state.tickets : [];
+
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+              renderAllCategoryDropdowns({
+                filterTicketType: 'ALL',
+                formTicketType: state.ticketTypes[0]?.name || 'Backbone',
+                filterFaultType: 'ALL',
+                formFaultType: state.faultTypes[0]?.name || 'FO Cut'
+              });
+              renderTable();
+              updateCloudBadge(`☁️ Terhubung ke Drive (${state.tickets.length} tiket)`, data.sheetUrl);
+            }
+          }
+        } catch (err) {
+          console.error('Gagal muat dari Google Drive:', err);
+          updateCloudBadge('⚠️ Mode lokal (gagal muat Drive)');
+        }
+      }
+
       function saveState() {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (err) {
           console.error('Gagal menyimpan state ke localStorage:', err);
         }
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(pushStateToDrive, 500);
       }
 
       function loadState() {
@@ -1454,16 +1535,14 @@
               faultTypes: getDefaultFaultTypes(),
               tickets: getSampleTickets()
             };
-            saveState();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             return;
           }
           const parsed = JSON.parse(raw);
           const ticketTypes = (parsed && Array.isArray(parsed.ticketTypes) && parsed.ticketTypes.length > 0)
-            ? parsed.ticketTypes
-            : getDefaultTicketTypes();
+            ? parsed.ticketTypes : getDefaultTicketTypes();
           const faultTypes = (parsed && Array.isArray(parsed.faultTypes) && parsed.faultTypes.length > 0)
-            ? parsed.faultTypes
-            : getDefaultFaultTypes();
+            ? parsed.faultTypes : getDefaultFaultTypes();
           const tickets = (parsed && Array.isArray(parsed.tickets))
             ? parsed.tickets.map((t) => ({
                 ...t,
@@ -1476,13 +1555,11 @@
 
           state = { ticketTypes, faultTypes, tickets };
         } catch (err) {
-          console.error('Data localStorage korup/tidak dapat dibaca, fallback ke data contoh:', err);
           state = {
             ticketTypes: getDefaultTicketTypes(),
             faultTypes: getDefaultFaultTypes(),
             tickets: getSampleTickets()
           };
-          saveState();
         }
       }
 
@@ -3214,6 +3291,7 @@
           formFaultType: state.faultTypes[0]?.name || 'FO Cut'
         });
         renderTable();
+        pullStateFromDrive();
         updateClock();
         setInterval(updateClock, 1000);
         setInterval(renderTable, 60000);
