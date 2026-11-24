@@ -178,6 +178,18 @@
           <!-- Tombol Aksi Header -->
           <div class="flex flex-wrap items-center gap-2">
             <button
+              id="btnSyncSettings"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer"
+              title="Hubungkan aplikasi ke Google Drive melalui Apps Script + Google Sheets"
+            >
+              <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6h.1a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span id="btnSyncSettingsLabel">Hubungkan Drive</span>
+            </button>
+
+            <button
               id="btnResetData"
               type="button"
               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
@@ -1175,6 +1187,69 @@
       </div>
     </div>
 
+    <!-- ==================== MODAL HUBUNGKAN GOOGLE DRIVE (APPS SCRIPT + SHEETS) ==================== -->
+    <div id="syncModal" class="hidden fixed inset-0 z-[65] overflow-y-auto bg-black/85 backdrop-blur-sm p-4">
+      <div class="min-h-full flex items-center justify-center">
+        <div class="animate-modal w-full max-w-lg bg-slate-900 border border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden">
+          <div class="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+              <span class="p-1.5 rounded-lg bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6h.1a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </span>
+              <div>
+                <h2 class="text-sm sm:text-base font-bold text-white">Hubungkan ke Google Drive</h2>
+                <p class="text-[11px] text-slate-400">Sinkronisasi tiket ke Google Sheets melalui Apps Script.</p>
+              </div>
+            </div>
+            <button type="button" onclick="closeSyncModal()" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+            <div class="rounded-xl bg-slate-950 border border-slate-800 p-3.5 text-[11px] text-slate-400 leading-relaxed space-y-1.5">
+              <p class="font-semibold text-slate-300">Belum punya URL? Siapkan sekali saja (sekitar 3 menit):</p>
+              <ol class="list-decimal list-inside space-y-1">
+                <li>Buka <a href="https://drive.google.com" target="_blank" class="text-cyan-400 hover:underline">Google Drive</a> &rarr; <strong>Baru</strong> &rarr; <strong>Google Spreadsheet</strong> kosong.</li>
+                <li>Menu <strong>Ekstensi</strong> &rarr; <strong>Apps Script</strong>, lalu tempel isi file <code class="text-cyan-300 font-mono">gas/Code.gs</code>.</li>
+                <li><strong>Deploy</strong> &rarr; <strong>New deployment</strong> &rarr; tipe <strong>Web app</strong> &rarr; akses <strong>Anyone</strong> &rarr; salin URL <code class="text-cyan-300 font-mono">/exec</code>.</li>
+              </ol>
+            </div>
+
+            <div>
+              <label for="syncUrlInput" class="block text-[11px] font-medium text-slate-300 mb-1">URL Web App Apps Script</label>
+              <input id="syncUrlInput" type="url" spellcheck="false" autocomplete="off" placeholder="https://script.google.com/macros/s/xxx/exec" class="w-full px-3 py-2 text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+            </div>
+
+            <div>
+              <label for="syncTokenInput" class="block text-[11px] font-medium text-slate-300 mb-1">Token Sinkronisasi (opsional)</label>
+              <input id="syncTokenInput" type="password" spellcheck="false" autocomplete="off" placeholder="Sama dengan Script Property SYNC_TOKEN" class="w-full px-3 py-2 text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+              <p class="text-[10px] text-slate-500 mt-1">Kosongkan jika Script Property <code class="font-mono">SYNC_TOKEN</code> tidak dipakai.</p>
+            </div>
+
+            <div id="syncModalStatus" class="hidden rounded-lg px-3 py-2 text-[11px] border"></div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <button id="btnDisconnectSync" type="button" class="px-3 py-2 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors cursor-pointer">Putuskan Koneksi</button>
+              <div class="flex items-center gap-2 ml-auto">
+                <button id="btnTestSync" type="button" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer">Tes Koneksi</button>
+                <button id="btnSaveSync" type="button" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-colors cursor-pointer">Simpan &amp; Sinkron</button>
+              </div>
+            </div>
+
+            <div id="syncSheetLinkWrap" class="hidden pt-2 border-t border-slate-800 text-[11px] text-slate-400">
+              Data tersimpan di spreadsheet Anda:
+              <a id="syncSheetLink" href="#" target="_blank" class="text-cyan-400 hover:underline font-medium">Buka Google Sheet</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== TOAST NOTIFICATION CONTAINER ==================== -->
     <div id="toastContainer" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
 
@@ -1437,10 +1512,34 @@
       }
 
       /* ==================== SINKRONISASI API JSON (APPS SCRIPT + GOOGLE SHEETS) ==================== */
-      // Tempel URL Web App (diakhiri /exec) dari gas/Code.gs di sini.
-      const GAS_API_URL = '';
-      // Opsional: samakan dengan Script Property SYNC_TOKEN. Kosongkan jika tidak dipakai.
-      const SYNC_TOKEN = '';
+      const SYNC_URL_KEY = 'stf_noc_v5_gas_url';
+      const SYNC_TOKEN_KEY = 'stf_noc_v5_gas_token';
+      let GAS_API_URL = '';
+      let SYNC_TOKEN = '';
+
+      function loadSyncConfig() {
+        try {
+          GAS_API_URL = localStorage.getItem(SYNC_URL_KEY) || '';
+          SYNC_TOKEN = localStorage.getItem(SYNC_TOKEN_KEY) || '';
+        } catch (err) {
+          GAS_API_URL = '';
+          SYNC_TOKEN = '';
+        }
+      }
+
+      function saveSyncConfig(url, token) {
+        GAS_API_URL = (url || '').trim();
+        SYNC_TOKEN = (token || '').trim();
+        try {
+          if (GAS_API_URL) localStorage.setItem(SYNC_URL_KEY, GAS_API_URL);
+          else localStorage.removeItem(SYNC_URL_KEY);
+          if (SYNC_TOKEN) localStorage.setItem(SYNC_TOKEN_KEY, SYNC_TOKEN);
+          else localStorage.removeItem(SYNC_TOKEN_KEY);
+        } catch (err) {}
+      }
+
+      loadSyncConfig();
+
       const SYNC_META_KEY = 'stf_noc_v5_sync';
       const SYNC_TIMEOUT_MS = 20000;
       const SYNC_RETRY_MS = 30000;
@@ -1462,13 +1561,154 @@
         return url.toString();
       }
 
+      function setSyncStatus(message, tone) {
+        const el = document.getElementById('syncModalStatus');
+        if (!el) return;
+        el.classList.remove(
+          'hidden',
+          'bg-emerald-500/10', 'text-emerald-300', 'border-emerald-500/30',
+          'bg-rose-500/10', 'text-rose-300', 'border-rose-500/30',
+          'bg-slate-800/60', 'text-slate-300', 'border-slate-700'
+        );
+        if (!message) {
+          el.textContent = '';
+          el.classList.add('hidden');
+          return;
+        }
+        const tones = {
+          ok: ['bg-emerald-500/10', 'text-emerald-300', 'border-emerald-500/30'],
+          error: ['bg-rose-500/10', 'text-rose-300', 'border-rose-500/30'],
+          info: ['bg-slate-800/60', 'text-slate-300', 'border-slate-700']
+        };
+        el.textContent = message;
+        el.classList.add(...(tones[tone] || tones.info));
+      }
+
+      function openSyncModal() {
+        const modal = document.getElementById('syncModal');
+        if (!modal) return;
+        document.getElementById('syncUrlInput').value = GAS_API_URL;
+        document.getElementById('syncTokenInput').value = SYNC_TOKEN;
+        document.getElementById('btnDisconnectSync').classList.toggle('invisible', !isSyncConfigured());
+        const sheetWrap = document.getElementById('syncSheetLinkWrap');
+        const sheetLink = document.getElementById('syncSheetLink');
+        const badgeLink = document.getElementById('cloudSheetLink');
+        if (isSyncConfigured() && badgeLink && badgeLink.getAttribute('href')) {
+          sheetLink.href = badgeLink.getAttribute('href');
+          sheetWrap.classList.remove('hidden');
+        } else {
+          sheetWrap.classList.add('hidden');
+        }
+        setSyncStatus('', 'info');
+        modal.classList.remove('hidden');
+      }
+
+      function closeSyncModal() {
+        const modal = document.getElementById('syncModal');
+        if (modal) modal.classList.add('hidden');
+      }
+
+      function readSyncForm() {
+        return {
+          url: document.getElementById('syncUrlInput').value.trim(),
+          token: document.getElementById('syncTokenInput').value.trim()
+        };
+      }
+
+      function isValidSyncUrl(url) {
+        return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/(exec|dev)$/.test(url);
+      }
+
+      async function testSyncLink() {
+        const { url, token } = readSyncForm();
+        if (!isValidSyncUrl(url)) {
+          setSyncStatus('URL tidak valid. Gunakan URL Web App yang diakhiri /exec.', 'error');
+          return;
+        }
+        const btn = document.getElementById('btnTestSync');
+        btn.disabled = true;
+        btn.classList.add('opacity-60');
+        setSyncStatus('⏳ Menghubungi Apps Script...', 'info');
+        try {
+          const testUrl = new URL(url);
+          if (token) testUrl.searchParams.set('token', token);
+          testUrl.searchParams.set('t', String(Date.now()));
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+          let res;
+          try {
+            res = await fetch(testUrl.toString(), { method: 'GET', cache: 'no-store', signal: controller.signal });
+          } finally {
+            clearTimeout(timer);
+          }
+          const text = await res.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (err) {
+            throw new Error(`Respons bukan JSON (HTTP ${res.status}). Pastikan URL berasal dari gas/Code.gs.`);
+          }
+          if (data.status === 'error') throw new Error(data.message || 'API menolak permintaan.');
+          const jumlah = data.isEmpty ? 0 : (data.count || 0);
+          setSyncStatus(`✅ Terhubung. Spreadsheet OK (${jumlah} tiket, revisi ${data.rev || 0}).`, 'ok');
+          if (data.sheetUrl) {
+            document.getElementById('syncSheetLink').href = data.sheetUrl;
+            document.getElementById('syncSheetLinkWrap').classList.remove('hidden');
+          }
+        } catch (err) {
+          setSyncStatus('❌ Gagal terhubung: ' + syncErrorText(err), 'error');
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('opacity-60');
+        }
+      }
+
+      async function saveSyncFromModal() {
+        const { url, token } = readSyncForm();
+        if (url && !isValidSyncUrl(url)) {
+          setSyncStatus('URL tidak valid. Gunakan URL Web App yang diakhiri /exec.', 'error');
+          return;
+        }
+        saveSyncConfig(url, token);
+        serverRev = 0;
+        pendingPush = !!url;
+        writeSyncMeta(pendingPush);
+        closeSyncModal();
+        if (url) {
+          updateCloudBadge('⏳ Sinkronisasi Google Sheets...');
+          await pullStateFromDrive();
+        } else {
+          updateCloudBadge('⚠️ Sinkron belum dikonfigurasi - mode lokal');
+          showToast('Koneksi Drive dilepas. Data tetap tersimpan lokal.', 'info');
+        }
+      }
+
+      function disconnectSync() {
+        saveSyncConfig('', '');
+        serverRev = 0;
+        pendingPush = false;
+        writeSyncMeta(false);
+        document.getElementById('syncUrlInput').value = '';
+        document.getElementById('syncTokenInput').value = '';
+        document.getElementById('syncSheetLinkWrap').classList.add('hidden');
+        setSyncStatus('Koneksi Drive dilepas. Data tetap tersimpan lokal.', 'info');
+        updateCloudBadge('⚠️ Sinkron belum dikonfigurasi - mode lokal');
+        showToast('Koneksi Google Drive dilepas.', 'info');
+      }
+
+      function setSyncButtonState() {
+        const label = document.getElementById('btnSyncSettingsLabel');
+        if (label) label.textContent = isSyncConfigured() ? 'Drive Terhubung' : 'Hubungkan Drive';
+      }
+
       function updateCloudBadge(text, sheetUrl) {
         let badge = document.getElementById('cloudSyncBadge');
         if (!badge) {
           badge = document.createElement('div');
           badge.id = 'cloudSyncBadge';
           badge.className = 'fixed bottom-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/95 border border-slate-700 text-xs text-slate-200 shadow-lg backdrop-blur-sm';
-          badge.innerHTML = '<span id="cloudSyncText"></span><a id="cloudSheetLink" href="#" target="_blank" class="hidden text-cyan-400 hover:underline font-medium">Buka Sheet</a>';
+          badge.innerHTML = '<button id="cloudSyncText" type="button" title="Klik untuk pengaturan koneksi Drive" class="cursor-pointer hover:text-cyan-300 transition-colors"></button><a id="cloudSheetLink" href="#" target="_blank" class="hidden text-cyan-400 hover:underline font-medium">Buka Sheet</a>';
+          badge.querySelector('#cloudSyncText').addEventListener('click', openSyncModal);
           document.body.appendChild(badge);
         }
         document.getElementById('cloudSyncText').textContent = text;
@@ -1476,7 +1716,11 @@
         if (sheetUrl && link) {
           link.href = sheetUrl;
           link.classList.remove('hidden');
+        } else if (link) {
+          link.removeAttribute('href');
+          link.classList.add('hidden');
         }
+        setSyncButtonState();
       }
 
       function readSyncMeta() {
@@ -3448,6 +3692,7 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
           if (!document.getElementById('confirmModal').classList.contains('hidden')) closeConfirmModal();
+          else if (!document.getElementById('syncModal').classList.contains('hidden')) closeSyncModal();
           else if (!document.getElementById('rfoModal').classList.contains('hidden')) closeRfoModal();
           else if (!document.getElementById('cirModal').classList.contains('hidden')) closeCirModal();
           else if (!document.getElementById('categoryModal').classList.contains('hidden')) closeCategoryModal();
@@ -3494,9 +3739,17 @@
       window.requestDeleteProgress = requestDeleteProgress;
       window.copyWhatsAppReport = copyWhatsAppReport;
       window.requestDeleteTicket = requestDeleteTicket;
+      window.closeSyncModal = closeSyncModal;
 
       // Inisialisasi aplikasi
       async function initApp() {
+        document.getElementById('btnSyncSettings').addEventListener('click', openSyncModal);
+        document.getElementById('btnTestSync').addEventListener('click', testSyncLink);
+        document.getElementById('btnSaveSync').addEventListener('click', saveSyncFromModal);
+        document.getElementById('btnDisconnectSync').addEventListener('click', disconnectSync);
+        document.getElementById('syncModal').addEventListener('click', (ev) => {
+          if (ev.target.id === 'syncModal') closeSyncModal();
+        });
         loadState();
         renderBrandLogos();
         renderAllCategoryDropdowns({
