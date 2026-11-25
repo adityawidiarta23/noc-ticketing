@@ -364,7 +364,10 @@
               <option value="Open">Open</option>
               <option value="In Progress">In Progress</option>
               <option value="Escalated">Escalated</option>
-              <option value="Pending">Pending</option>
+              <option value="PENDING_GROUP">Pending (1 / 2 / 3)</option>
+              <option value="Pending 1">Pending 1</option>
+              <option value="Pending 2">Pending 2</option>
+              <option value="Pending 3">Pending 3</option>
               <option value="Resolved">Resolved</option>
               <option value="Closed">Closed</option>
               <option value="RESOLVED_GROUP">Selesai (Resolved &amp; Closed)</option>
@@ -486,7 +489,9 @@
                   <option value="Open">Open</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Escalated">Escalated</option>
-                  <option value="Pending">Pending</option>
+                  <option value="Pending 1">Pending 1</option>
+                  <option value="Pending 2">Pending 2</option>
+                  <option value="Pending 3">Pending 3</option>
                   <option value="Resolved">Resolved</option>
                   <option value="Closed">Closed</option>
                 </select>
@@ -580,6 +585,9 @@
                   <option value="On-Site / OTDR">Tahap: On-Site / OTDR</option>
                   <option value="Splicing / Repair">Tahap: Splicing / Repair</option>
                   <option value="RFO / Verification">Tahap: RFO / Verification</option>
+                  <option value="Pending 1">Tahap: Pending 1</option>
+                  <option value="Pending 2">Tahap: Pending 2</option>
+                  <option value="Pending 3">Tahap: Pending 3</option>
                   <option value="Resolved / Up">Tahap: Resolved / Up</option>
                   <option value="Update">Tahap: Update</option>
                 </select>
@@ -640,6 +648,7 @@
                   <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ringkasan Insiden</h3>
                   <span id="detDuration" class="font-mono text-xs px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700"></span>
                 </div>
+                <div id="detPendingSummary" class="hidden rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-2 font-mono text-[11px] text-amber-200"></div>
 
                 <div class="space-y-2.5 text-xs">
                   <div>
@@ -676,7 +685,9 @@
                       <option value="Open">Open</option>
                       <option value="In Progress">In Progress</option>
                       <option value="Escalated">Escalated</option>
-                      <option value="Pending">Pending</option>
+                      <option value="Pending 1">Pending 1</option>
+                      <option value="Pending 2">Pending 2</option>
+                      <option value="Pending 3">Pending 3</option>
                       <option value="Resolved">Resolved</option>
                       <option value="Closed">Closed</option>
                     </select>
@@ -742,6 +753,9 @@
                       <option value="On-Site / OTDR">On-Site / OTDR</option>
                       <option value="Splicing / Repair">Splicing / Repair</option>
                       <option value="RFO / Verification">RFO / Verification</option>
+                      <option value="Pending 1">Pending 1</option>
+                      <option value="Pending 2">Pending 2</option>
+                      <option value="Pending 3">Pending 3</option>
                       <option value="Resolved / Up">Resolved / Up</option>
                       <option value="Update">Update</option>
                     </select>
@@ -1272,6 +1286,7 @@
 
       // Definisi kelompok status
       const ACTIVE_DOWN_STATUSES = ['Open', 'In Progress', 'Escalated'];
+      const PENDING_STATUSES = ['Pending 1', 'Pending 2', 'Pending 3'];
       const DONE_STATUSES = ['Resolved', 'Closed'];
 
       // 7 Warna neon badge kategori
@@ -1292,6 +1307,9 @@
         'On-Site / OTDR':     'bg-orange-500/15 text-orange-300 border-orange-500/35',
         'Splicing / Repair':  'bg-purple-500/15 text-purple-300 border-purple-500/35',
         'RFO / Verification': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
+        'Pending 1':          'bg-amber-500/15 text-amber-300 border-amber-500/35',
+        'Pending 2':          'bg-orange-500/15 text-orange-300 border-orange-500/40',
+        'Pending 3':          'bg-rose-500/15 text-rose-300 border-rose-500/40',
         'Resolved / Up':      'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
         'Update':             'bg-slate-700/70 text-slate-300 border-slate-600'
       };
@@ -1449,7 +1467,8 @@
             type: 'Gamas (Massal)',
             faultType: 'Power / PLN Padam',
             priority: 'Critical',
-            status: 'Pending',
+            status: 'Pending 1',
+            pendingPeriods: [{ id: 'pnd401', status: 'Pending 1', startTime: hrsAgo(2.5), endTime: '' }],
             segment: 'Power PLN & ATS Genset Shelter POP Karawang Barat',
             location: 'Shelter POP Karawang Barat (-6.3054, 107.2912)',
             impacts: ['POP Karawang Barat', 'OLT-KRW-01', 'OLT-KRW-02', 'Switch Metro KRW-SW1', 'PT Manufaktur Jaya (500M)'],
@@ -1473,7 +1492,7 @@
               { id: 'p401', timestamp: hrsAgo(4.2), stage: 'Alarm / Detection', pic: 'Auto-NMS Alert', note: 'Alarm AC Fail & Battery Low (<47.2V) terdeteksi di Shelter POP Karawang Barat.' },
               { id: 'p402', timestamp: hrsAgo(3.8), stage: 'Dispatch / OTW', pic: 'Tim Power & CME Regional', note: 'Tim CME meluncur ke POP Karawang Barat membawa jumper aki dan cadangan solar 40 liter.' },
               { id: 'p403', timestamp: hrsAgo(3.0), stage: 'On-Site / OTDR', pic: 'Tim Power & CME Regional', note: 'Genset gagal auto-start akibat aki starter drop 10.4V. Dilakukan starter manual dengan jumper.' },
-              { id: 'p404', timestamp: hrsAgo(2.5), stage: 'Update', pic: 'Tim Power & CME Regional', note: 'Genset beroperasi normal, DC rectifier stabil 53.6V. Status Pending menunggu suplai PLN normal kembali.' }
+              { id: 'p404', timestamp: hrsAgo(2.5), stage: 'Pending 1', pic: 'Tim Power & CME Regional', note: 'Genset beroperasi normal, DC rectifier stabil 53.6V. Status Pending 1 menunggu suplai PLN normal kembali.' }
             ]
           },
           {
@@ -1775,6 +1794,34 @@
         }
       }
 
+      function normalizeTicket(ticket, ticketTypes, faultTypes) {
+        const status = ticket.status === 'Pending' ? 'Pending 1' : (ticket.status || 'Open');
+        const pendingPeriods = (Array.isArray(ticket.pendingPeriods) ? ticket.pendingPeriods : [])
+          .filter((period) => period && PENDING_STATUSES.includes(period.status) && !isNaN(Date.parse(period.startTime)))
+          .map((period) => ({ ...period, endTime: period.endTime || '' }));
+        const nowIso = new Date().toISOString();
+
+        if (PENDING_STATUSES.includes(status)) {
+          if (!pendingPeriods.some((period) => !period.endTime)) {
+            pendingPeriods.push({ id: generateProgressId(), status, startTime: ticket.updatedAt || nowIso, endTime: '' });
+          }
+        } else {
+          pendingPeriods.forEach((period) => {
+            if (!period.endTime) period.endTime = ticket.resolvedTime || ticket.updatedAt || nowIso;
+          });
+        }
+
+        return {
+          ...ticket,
+          status,
+          type: ticket.type || ticketTypes[0]?.name || 'Backbone',
+          faultType: ticket.faultType || faultTypes[0]?.name || 'FO Cut',
+          impacts: Array.isArray(ticket.impacts) ? ticket.impacts : [],
+          progressList: Array.isArray(ticket.progressList) ? ticket.progressList : [],
+          pendingPeriods
+        };
+      }
+
       function normalizeState(raw) {
         const source = raw && typeof raw === 'object' ? raw : {};
         const ticketTypes = (Array.isArray(source.ticketTypes) && source.ticketTypes.length > 0)
@@ -1784,13 +1831,7 @@
         const tickets = Array.isArray(source.tickets)
           ? source.tickets
               .filter((t) => t && typeof t === 'object')
-              .map((t) => ({
-                ...t,
-                type: t.type || ticketTypes[0]?.name || 'Backbone',
-                faultType: t.faultType || faultTypes[0]?.name || 'FO Cut',
-                impacts: Array.isArray(t.impacts) ? t.impacts : [],
-                progressList: Array.isArray(t.progressList) ? t.progressList : []
-              }))
+              .map((t) => normalizeTicket(t, ticketTypes, faultTypes))
           : [];
         return {
           ticketTypes,
@@ -1804,6 +1845,9 @@
         const stamps = [ticket.startTime, ticket.resolvedTime, ticket.updatedAt];
         (Array.isArray(ticket.progressList) ? ticket.progressList : []).forEach((p) => {
           stamps.push(p && p.timestamp);
+        });
+        (Array.isArray(ticket.pendingPeriods) ? ticket.pendingPeriods : []).forEach((p) => {
+          stamps.push(p && p.startTime, p && p.endTime);
         });
         return stamps.reduce((max, value) => {
           const time = Date.parse(value || '') || 0;
@@ -2003,16 +2047,13 @@
           const faultTypes = (parsed && Array.isArray(parsed.faultTypes) && parsed.faultTypes.length > 0)
             ? parsed.faultTypes : getDefaultFaultTypes();
           const tickets = (parsed && Array.isArray(parsed.tickets))
-            ? parsed.tickets.map((t) => ({
-                ...t,
-                type: t.type || ticketTypes[0].name,
-                faultType: t.faultType || faultTypes[0].name,
-                impacts: Array.isArray(t.impacts) ? t.impacts : [],
-                progressList: Array.isArray(t.progressList) ? t.progressList : []
-              }))
+            ? parsed.tickets
+                .filter((t) => t && typeof t === 'object')
+                .map((t) => normalizeTicket(t, ticketTypes, faultTypes))
             : getSampleTickets();
 
           state = { ticketTypes, faultTypes, tickets };
+          persistLocal();
         } catch (err) {
           state = {
             ticketTypes: getDefaultTicketTypes(),
@@ -2156,24 +2197,99 @@
         return [...(list || [])].sort((a, b) => (new Date(a.timestamp).getTime() || 0) - (new Date(b.timestamp).getTime() || 0));
       }
 
-      function calcDuration(startTime, resolvedTime, status) {
-        const start = new Date(startTime).getTime();
-        if (isNaN(start)) return { text: '-', label: 'Downtime', colorClass: 'text-slate-400' };
-        const isDone = DONE_STATUSES.includes(status);
-        const end = (isDone && resolvedTime) ? new Date(resolvedTime).getTime() : Date.now();
-        const diffMs = Math.max(0, end - start);
-        const totalMins = Math.floor(diffMs / 60000);
+      function formatDurationFromMs(durationMs) {
+        const totalMins = Math.floor(Math.max(0, durationMs) / 60000);
         const days = Math.floor(totalMins / 1440);
         const hrs = Math.floor((totalMins % 1440) / 60);
         const mins = totalMins % 60;
+        return days > 0 ? `${days}h ${hrs}j ${mins}m` : (hrs > 0 ? `${hrs}j ${mins}m` : `${mins}m`);
+      }
 
-        let text = days > 0 ? `${days}h ${hrs}j ${mins}m` : (hrs > 0 ? `${hrs}j ${mins}m` : `${mins}m`);
+      function getPendingDurationMs(ticket, start, end) {
+        const intervals = (Array.isArray(ticket.pendingPeriods) ? ticket.pendingPeriods : [])
+          .filter((period) => period && PENDING_STATUSES.includes(period.status))
+          .map((period) => {
+            const periodStart = Date.parse(period.startTime);
+            const parsedEnd = period.endTime ? Date.parse(period.endTime) : end;
+            const periodEnd = isNaN(parsedEnd) ? end : parsedEnd;
+            return { start: Math.max(start, periodStart), end: Math.min(end, periodEnd) };
+          })
+          .filter((period) => !isNaN(period.start) && period.end > period.start)
+          .sort((a, b) => a.start - b.start);
+
+        const merged = [];
+        intervals.forEach((period) => {
+          const last = merged[merged.length - 1];
+          if (last && period.start <= last.end) last.end = Math.max(last.end, period.end);
+          else merged.push({ ...period });
+        });
+        return merged.reduce((total, period) => total + (period.end - period.start), 0);
+      }
+
+      function applyTicketStatusChange(ticket, newStatus, changedAt, resolvedTime) {
+        const parsedChange = Date.parse(changedAt || '');
+        const changeTime = isNaN(parsedChange) ? Date.now() : parsedChange;
+        const changeIso = new Date(changeTime).toISOString();
+        const oldStatus = ticket.status;
+        const pendingPeriods = Array.isArray(ticket.pendingPeriods) ? [...ticket.pendingPeriods] : [];
+
+        if (oldStatus === newStatus) {
+          if (DONE_STATUSES.includes(newStatus)) ticket.resolvedTime = resolvedTime || ticket.resolvedTime || changeIso;
+          return;
+        }
+
+        const openPeriod = pendingPeriods.find((period) => period && !period.endTime);
+        if (openPeriod) {
+          const periodStart = Date.parse(openPeriod.startTime);
+          openPeriod.endTime = !isNaN(periodStart) && changeTime < periodStart
+            ? new Date(periodStart).toISOString()
+            : changeIso;
+        }
+
+        ticket.status = newStatus;
+        if (PENDING_STATUSES.includes(newStatus)) {
+          pendingPeriods.push({ id: generateProgressId(), status: newStatus, startTime: changeIso, endTime: '' });
+          ticket.resolvedTime = '';
+        } else if (DONE_STATUSES.includes(newStatus)) {
+          ticket.resolvedTime = resolvedTime || ticket.resolvedTime || changeIso;
+        } else {
+          ticket.resolvedTime = '';
+        }
+        ticket.pendingPeriods = pendingPeriods;
+      }
+
+      function calcDuration(ticket) {
+        const start = Date.parse(ticket.startTime);
+        if (isNaN(start)) return { text: '-', label: 'Downtime', colorClass: 'text-slate-400', pendingText: '0m', elapsedText: '-', pendingMs: 0, netMs: 0 };
+        const isDone = DONE_STATUSES.includes(ticket.status);
+        const parsedEnd = isDone && ticket.resolvedTime ? Date.parse(ticket.resolvedTime) : Date.now();
+        const end = isNaN(parsedEnd) ? Date.now() : parsedEnd;
+        const elapsedMs = Math.max(0, end - start);
+        const pendingMs = getPendingDurationMs(ticket, start, end);
+        const netMs = Math.max(0, elapsedMs - pendingMs);
+        const totalMins = Math.floor(netMs / 60000);
+        const pendingMins = Math.floor(pendingMs / 60000);
+
         let colorClass = 'text-cyan-300';
         if (isDone) colorClass = 'text-emerald-400';
         else if (totalMins >= 240) colorClass = 'text-rose-400 font-semibold';
         else if (totalMins >= 120) colorClass = 'text-amber-400 font-medium';
 
-        return { text, label: isDone ? 'MTTR' : 'Downtime', colorClass };
+        return {
+          text: formatDurationFromMs(netMs),
+          label: isDone ? 'MTTR' : 'Downtime',
+          colorClass,
+          pendingText: pendingMs > 0 ? (pendingMins > 0 ? formatDurationFromMs(pendingMs) : '<1m') : '0m',
+          elapsedText: formatDurationFromMs(elapsedMs),
+          pendingMs,
+          netMs
+        };
+      }
+
+      function formatDurationReport(dur) {
+        return dur.pendingMs > 0
+          ? `${dur.text} (${dur.label}; pending -${dur.pendingText}; bruto ${dur.elapsedText})`
+          : `${dur.text} (${dur.label})`;
       }
 
       function generateTicketNumber() {
@@ -2228,7 +2344,9 @@
           'Open': 'bg-rose-500/15 text-rose-300 border-rose-500/35',
           'In Progress': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
           'Escalated': 'bg-orange-500/15 text-orange-300 border-orange-500/40',
-          'Pending': 'bg-amber-500/15 text-amber-300 border-amber-500/35',
+          'Pending 1': 'bg-amber-500/15 text-amber-300 border-amber-500/35',
+          'Pending 2': 'bg-orange-500/15 text-orange-300 border-orange-500/40',
+          'Pending 3': 'bg-rose-500/15 text-rose-300 border-rose-500/40',
           'Resolved': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
           'Closed': 'bg-slate-700/70 text-slate-300 border-slate-600'
         };
@@ -2571,6 +2689,7 @@
 
           let matchS = true;
           if (status === 'ACTIVE_GROUP') matchS = ACTIVE_DOWN_STATUSES.includes(t.status);
+          else if (status === 'PENDING_GROUP') matchS = PENDING_STATUSES.includes(t.status);
           else if (status === 'RESOLVED_GROUP') matchS = DONE_STATUSES.includes(t.status);
           else if (status !== 'ALL') matchS = t.status === status;
 
@@ -2612,7 +2731,7 @@
         empty.classList.add('hidden');
 
         tbody.innerHTML = list.map((t) => {
-          const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+          const dur = calcDuration(t);
           const impacts = Array.isArray(t.impacts) ? t.impacts : [];
           const visibleImp = impacts.slice(0, 3);
           const remImp = impacts.length - visibleImp.length;
@@ -2670,6 +2789,7 @@
                   <span class="text-slate-500">${dur.label}:</span>
                   <span class="${dur.colorClass}">${dur.text}</span>
                 </div>
+                ${dur.pendingMs > 0 ? `<div class="font-mono text-[10px] text-amber-300/90" title="Durasi bruto ${dur.elapsedText} dikurangi total pending ${dur.pendingText}">Pending: -${dur.pendingText} <span class="text-slate-500">(bruto ${dur.elapsedText})</span></div>` : ''}
               </td>
 
               <td class="py-3.5 px-4 bg-amber-950/10 border-x border-slate-800 max-w-[290px]" onclick="event.stopPropagation()">
@@ -2846,7 +2966,9 @@
         if (origId) {
           const idx = state.tickets.findIndex((t) => t.id === origId);
           if (idx !== -1) {
-            state.tickets[idx] = { ...state.tickets[idx], ...payload };
+            const existing = state.tickets[idx];
+            applyTicketStatusChange(existing, status, DONE_STATUSES.includes(status) ? resolvedIso : new Date().toISOString(), resolvedIso);
+            state.tickets[idx] = { ...existing, ...payload, pendingPeriods: existing.pendingPeriods || [] };
             saveState();
             renderTable();
             closeFormModal();
@@ -2857,6 +2979,9 @@
           const initStage = document.getElementById('inInitialStage').value;
           const newTicket = {
             ...payload,
+            pendingPeriods: PENDING_STATUSES.includes(status)
+              ? [{ id: generateProgressId(), status, startTime: new Date().toISOString(), endTime: '' }]
+              : [],
             progressList: [{
               id: generateProgressId(),
               timestamp: startIso,
@@ -2889,13 +3014,18 @@
       }
 
       function populateDetailModal(t) {
-        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const dur = calcDuration(t);
         document.getElementById('detId').textContent = t.id;
         document.getElementById('detTicketTypeBadge').innerHTML = getTicketTypeBadge(t.type);
         document.getElementById('detFaultTypeBadge').innerHTML = getFaultTypeBadge(t.faultType);
         document.getElementById('detPriorityBadge').innerHTML = getPriorityBadge(t.priority);
         document.getElementById('detStatusBadge').innerHTML = getStatusBadge(t.status);
         document.getElementById('detDuration').innerHTML = `<span class="text-slate-400">${dur.label}:</span> <span class="${dur.colorClass} font-bold">${dur.text}</span>`;
+        const pendingSummary = document.getElementById('detPendingSummary');
+        pendingSummary.classList.toggle('hidden', dur.pendingMs <= 0);
+        pendingSummary.innerHTML = dur.pendingMs > 0
+          ? `Durasi bruto: ${dur.elapsedText}<br>Total Pending 1–3 dikurangkan: -${dur.pendingText}`
+          : '';
 
         document.getElementById('detSegment').textContent = t.segment;
         document.getElementById('detLocation').textContent = t.location;
@@ -3021,9 +3151,10 @@
           showToast('Item progress CIR diperbarui.', 'success');
         } else {
           t.progressList.push({ id: generateProgressId(), timestamp: tsIso, stage, pic, note });
-          if (stage === 'Resolved / Up' && !DONE_STATUSES.includes(t.status)) {
-            t.status = 'Resolved';
-            t.resolvedTime = tsIso;
+          if (PENDING_STATUSES.includes(stage)) {
+            applyTicketStatusChange(t, stage, tsIso);
+          } else if (stage === 'Resolved / Up' && !DONE_STATUSES.includes(t.status)) {
+            applyTicketStatusChange(t, 'Resolved', tsIso, tsIso);
           }
           showToast('Progress baru ditambahkan ke kronologi CIR.', 'success');
         }
@@ -3133,7 +3264,7 @@
         if (!t) return;
         activeCirId = ticketId;
 
-        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const dur = calcDuration(t);
         const sortedProg = getSortedProgress(t.progressList);
 
         document.getElementById('cirDocId').textContent = t.id;
@@ -3145,7 +3276,7 @@
         document.getElementById('cirLocation').textContent = t.location;
         document.getElementById('cirStartTime').textContent = formatDateTimeWIB(t.startTime);
         document.getElementById('cirResolvedTime').textContent = t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'Masih Berlangsung (On-Going)';
-        document.getElementById('cirMttr').textContent = `${dur.text} (${dur.label})`;
+        document.getElementById('cirMttr').textContent = `${formatDurationReport(dur)}`;
         document.getElementById('cirStatusPic').textContent = `${t.status} — ${t.technician || '-'}`;
 
         const impacts = t.impacts || [];
@@ -3216,7 +3347,7 @@
         const t = state.tickets.find((x) => x.id === activeRfoId);
         if (!t) return;
 
-        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const dur = calcDuration(t);
         const sortedProg = getSortedProgress(t.progressList);
 
         document.getElementById('rfoDocNoPreview').textContent = document.getElementById('rfoInDocNo').value.trim() || generateRfoDocNumber(t);
@@ -3231,7 +3362,7 @@
         document.getElementById('rfoLocationPreview').textContent = t.location;
         document.getElementById('rfoStartPreview').textContent = formatDateTimeWIB(t.startTime);
         document.getElementById('rfoEndPreview').textContent = t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'On-Going';
-        document.getElementById('rfoMttrPreview').textContent = `${dur.text} (${dur.label})`;
+        document.getElementById('rfoMttrPreview').textContent = `${formatDurationReport(dur)}`;
         document.getElementById('rfoFinalStatusPreview').textContent = t.status;
 
         const impacts = t.impacts || [];
@@ -3314,7 +3445,7 @@
         const t = state.tickets.find((x) => x.id === ticketId);
         if (!t) return;
 
-        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const dur = calcDuration(t);
         const sortedProg = getSortedProgress(t.progressList);
         const impactBullets = (t.impacts || []).length > 0 ? t.impacts.map((x) => `  • ${x}`).join('\n') : '  • -';
         const shortChrono = sortedProg.length > 0
@@ -3329,6 +3460,7 @@
           `*Status*        : *${t.status}*`,
           `*Waktu Mulai*   : ${formatDateTimeWIB(t.startTime)}`,
           `*${dur.label}*       : ${dur.text}`,
+          ...(dur.pendingMs > 0 ? [`*Pending*        : -${dur.pendingText}`, `*Durasi Bruto*   : ${dur.elapsedText}`] : []),
           `*Segmen*        : ${t.segment}`,
           `*Lokasi*        : ${t.location}`,
           `*PIC / Tim*     : ${t.technician || '-'}`,
@@ -3356,7 +3488,7 @@
         const dateStamp = new Date().toISOString().slice(0, 10);
 
         const ticketRows = data.map((t) => {
-          const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+          const dur = calcDuration(t);
           const sortedProg = getSortedProgress(t.progressList);
           const cirSummary = sortedProg.map((p, i) => `${i + 1}. [${formatTimeOnlyWIB(p.timestamp)}] ${p.stage}: ${p.note}`).join(' | ');
           return {
@@ -3372,6 +3504,8 @@
             'Est. Pelanggan/Link': Number(t.impactSubs || 0),
             'Waktu Mulai (WIB)': formatDateTimeWIB(t.startTime),
             'Waktu Resolved (WIB)': t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : '-',
+            'Durasi Bruto': dur.elapsedText,
+            'Total Pending Dikurangkan': dur.pendingText,
             'Durasi / MTTR': dur.text,
             'PIC / Tim': t.technician || '-',
             'RCA': t.rca || '-',
@@ -3549,13 +3683,12 @@
         const newStatus = document.getElementById('detQuickStatus').value;
         if (t.status === newStatus) { showToast('Status tiket sudah sama.', 'info'); return; }
         const oldStatus = t.status;
-        t.status = newStatus;
         const nowIso = new Date().toISOString();
-        t.resolvedTime = DONE_STATUSES.includes(newStatus) ? (t.resolvedTime || nowIso) : '';
+        applyTicketStatusChange(t, newStatus, nowIso);
         t.progressList.push({
           id: generateProgressId(),
           timestamp: nowIso,
-          stage: DONE_STATUSES.includes(newStatus) ? 'Resolved / Up' : 'Update',
+          stage: DONE_STATUSES.includes(newStatus) ? 'Resolved / Up' : (PENDING_STATUSES.includes(newStatus) ? newStatus : 'Update'),
           pic: t.technician || 'NOC Operator',
           note: `Status tiket diubah dari ${oldStatus} menjadi ${newStatus}.`
         });
@@ -3578,7 +3711,7 @@
         if (!activeCirId) return;
         const t = state.tickets.find((x) => x.id === activeCirId);
         if (!t) return;
-        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const dur = calcDuration(t);
         const sorted = getSortedProgress(t.progressList);
         const impacts = (t.impacts || []).length > 0 ? t.impacts.map((x) => `  • ${x}`).join('\n') : '  • -';
         const chrono = sorted.length > 0 ? sorted.map((p, i) => `${i + 1}. [${formatDateTimeWIB(p.timestamp)}] (${p.stage} - ${p.pic})\n   ${p.note}`).join('\n') : '-';
@@ -3594,6 +3727,7 @@
           `Waktu Mulai   : ${formatDateTimeWIB(t.startTime)}`,
           `Waktu Selesai : ${t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'On-Going'}`,
           `Total ${dur.label} : ${dur.text}`,
+          ...(dur.pendingMs > 0 ? [`Pending dikurangkan : -${dur.pendingText}`, `Durasi bruto : ${dur.elapsedText}`] : []),
           `----------------------------------------`,
           `*LIST IMPACT (${(t.impacts || []).length} Node | Est. ~${formatNumber(t.impactSubs)} Subs):*`,
           impacts,
@@ -3624,7 +3758,7 @@
         if (!activeRfoId) return;
         const t = state.tickets.find((x) => x.id === activeRfoId);
         if (!t) return;
-        const dur = calcDuration(t.startTime, t.resolvedTime, t.status);
+        const dur = calcDuration(t);
         const docNo = document.getElementById('rfoInDocNo').value.trim() || generateRfoDocNumber(t);
         const parts = [
           `*REASON FOR OUTAGE (RFO) — PT SOKKA TAMA FIBER*`,
@@ -3640,6 +3774,7 @@
           `Waktu Mulai   : ${formatDateTimeWIB(t.startTime)}`,
           `Waktu Selesai : ${t.resolvedTime ? formatDateTimeWIB(t.resolvedTime) : 'On-Going'}`,
           `Total ${dur.label} : ${dur.text}`,
+          ...(dur.pendingMs > 0 ? [`Pending dikurangkan : -${dur.pendingText}`, `Durasi bruto : ${dur.elapsedText}`] : []),
           `----------------------------------------`,
           `*DAMPAK GANGGUAN:* ${(t.impacts || []).join(', ') || '-'} (Est. ~${formatNumber(t.impactSubs)} Subs)`,
           `*RCA:* ${document.getElementById('rfoInRca').value.trim() || '-'}`,
